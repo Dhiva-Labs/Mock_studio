@@ -1,0 +1,24 @@
+Source: mockstudio
+Section: devel
+Priority: optional
+Maintainer: Dhivakar R <dhivakar1010@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/Dhiva-Labs/Mock_studio
+Rules-Requires-Root: no
+
+Package: mockstudio
+Architecture: amd64
+Depends: ${misc:Depends}, libgtk-3-0, libglib2.0-0
+Description: Production mock server for building and testing HTTP endpoints
+ Mock Studio is a desktop app that turns endpoint design into a real,
+ running HTTP server. Create endpoints visually (all methods, path
+ params and wildcards), craft JSON/XML/HTML/text responses, and expose
+ them on localhost, your LAN, or a public tunnel.
+ .
+ It supports conditional rules, response sequences, weighted-random
+ selection, {{templated}} bodies, latency simulation and fault
+ injection, a live request log, proxy passthrough with recording, and
+ OpenAPI/Swagger and Postman import - friendly enough for non-developers.
+ .
+ Published by Dhiva-Labs.

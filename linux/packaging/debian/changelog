@@ -1,0 +1,9 @@
+mockstudio (1.0.0) noble; urgency=medium
+
+  * Initial release of Mock Studio by dhiva labs: a production-grade mock
+    server desktop app. Design HTTP endpoints visually and run a real
+    shelf-based server with conditional rules, response sequences,
+    weighted randomness, templating, latency and fault injection, a live
+    request log, LAN + public-tunnel sharing, and OpenAPI/Postman import.
+
+ -- Dhivakar R <dhivakar1010@gmail.com>  Wed, 22 Jul 2026 03:00:00 +0530

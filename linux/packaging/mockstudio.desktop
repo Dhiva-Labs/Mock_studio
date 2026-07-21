@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Mock Studio
+Comment=Production mock server - design endpoints, expose them on LAN or a public tunnel
+Exec=mockstudio
+Icon=mockstudio
+Terminal=false
+Type=Application
+Categories=Development;Network;
+Keywords=mock;server;API;REST;HTTP;endpoint;stub;testing;
+StartupWMClass=com.dhivalabs.mock_studio
