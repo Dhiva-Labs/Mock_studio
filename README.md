@@ -1,0 +1,70 @@
+# Mock Studio
+
+*by dhiva labs*
+
+A production-grade **mock server** you drive from a desktop app. Design HTTP
+endpoints visually, hit **Start**, and any client — your apps, browsers,
+emulators, phones on the same Wi-Fi, or webhook providers over a public tunnel —
+gets realistic mock responses.
+
+Built for two audiences at once: a complete beginner can build a working mock
+API from templates in a minute, while an expert gets precise control over rules,
+sequences, latency, faults, templating and proxying.
+
+## Highlights
+
+- **Visual endpoint editor** — method, path templates (`/users/:id`, `/files/*`,
+  `/assets/**`), status, headers, and JSON/text/HTML/XML bodies.
+- **Smart responses** — four strategies per endpoint:
+  - *Single* — always the same.
+  - *Conditional rules* — pick a response from the query, headers, path params,
+    body JSON, or method (e.g. `password == "secret"` → 200, else 401).
+  - *Sequence* — round-robin responses, ideal for testing retries.
+  - *Random / weighted* — simulate a flaky service.
+- **Dynamic templating** — inject request data and fakes into responses:
+  `{{params.id}}`, `{{query.page}}`, `{{header.Authorization}}`, `{{body.email}}`,
+  `{{uuid}}`, `{{now}}`, `{{randomInt(1,100)}}`, `{{faker.name}}`, `{{faker.email}}`…
+- **Latency & fault injection** — fixed/jittered delays, drop-connection, empty
+  body, malformed body, or an infinite hang for timeout testing.
+- **Built-in tester** — send a live request and view the response inline, or copy
+  the URL / a ready-made `curl` command / open it in the browser.
+- **Live request log** — every request in real time with a full detail pane
+  (headers, body, matched endpoint, timing), searchable and error-filterable.
+- **Share & expose** — localhost, LAN URLs (with a QR code for phones), and a
+  one-click public tunnel via **cloudflared** (no account) or **ngrok**.
+- **Proxy & record** — forward unmatched requests to a real API and convert the
+  captured responses into mocks with one click.
+- **OpenAPI / Swagger import** — generate a full mock from a spec (JSON or YAML).
+- **Auth simulation**, **CORS**, **global headers/delay**, multiple projects on
+  different ports simultaneously.
+- **Git-friendly storage** — each project is a readable JSON file you can commit
+  and share; export/import built in.
+
+## Getting started
+
+```bash
+flutter pub get
+flutter run -d linux      # or build: flutter build linux
+```
+
+On first launch a sample project ("My First Mock API") is created so you can
+explore immediately. Toggle **Guide** in the top bar for extra hints.
+
+## Public tunnels
+
+- **cloudflared** quick tunnels need no account. Install `cloudflared` and it
+  appears in *Share & Expose → Public internet*.
+- **ngrok** needs a one-time `ngrok config add-authtoken <token>`.
+
+## Tech
+
+Flutter (Material 3) · `shelf` HTTP server · Provider · file-based JSON storage.
+
+## Tests
+
+```bash
+flutter test
+```
+
+Covers route matching, templating, response resolution, and a live end-to-end
+server integration test.

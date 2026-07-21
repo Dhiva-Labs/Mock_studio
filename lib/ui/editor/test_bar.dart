@@ -1,0 +1,391 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+import '../../models/endpoint.dart';
+import '../../models/enums.dart';
+import '../../models/mock_project.dart';
+import '../../theme/app_theme.dart';
+import '../widgets/badges.dart';
+import '../widgets/helpers.dart';
+
+/// A "try it" bar under the endpoint header. Shows the call URL and can send a
+/// live request to the running server, displaying the response inline.
+class TestBar extends StatefulWidget {
+  final Endpoint endpoint;
+  final MockProject project;
+  final bool running;
+  const TestBar({
+    super.key,
+    required this.endpoint,
+    required this.project,
+    required this.running,
+  });
+
+  @override
+  State<TestBar> createState() => _TestBarState();
+}
+
+class _TestBarState extends State<TestBar> {
+  late final TextEditingController _pathCtrl;
+  final TextEditingController _bodyCtrl = TextEditingController(
+    text: '{\n  "name": "Test"\n}',
+  );
+  bool _sending = false;
+  bool _expanded = false;
+  _TestResult? _result;
+
+  Endpoint get ep => widget.endpoint;
+
+  @override
+  void initState() {
+    super.initState();
+    _pathCtrl = TextEditingController(text: _concretePath());
+  }
+
+  @override
+  void didUpdateWidget(covariant TestBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Keep the concrete path roughly in sync when the template changes.
+    if (oldWidget.endpoint.path != ep.path) {
+      _pathCtrl.text = _concretePath();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pathCtrl.dispose();
+    _bodyCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Replaces `:params` / wildcards with sample values so the URL is callable.
+  String _concretePath() {
+    var p = ep.normalizedPath;
+    p = p.replaceAllMapped(RegExp(r':([A-Za-z0-9_]+)'), (m) => '1');
+    p = p.replaceAll('**', 'sample/path');
+    p = p.replaceAll('*', 'sample');
+    return p;
+  }
+
+  String get _baseUrl => 'http://localhost:${widget.project.port}';
+  String get _fullUrl =>
+      '$_baseUrl${_pathCtrl.text.startsWith('/') ? '' : '/'}${_pathCtrl.text}';
+
+  bool get _hasBody =>
+      ep.method == HttpMethodType.post ||
+      ep.method == HttpMethodType.put ||
+      ep.method == HttpMethodType.patch ||
+      ep.method == HttpMethodType.any;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+            child: Row(
+              children: [
+                MethodBadge(ep.method, compact: true),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _pathCtrl,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      prefixText: _baseUrl,
+                      prefixStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12.5,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      filled: false,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12.5,
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _iconAction(
+                  Icons.copy,
+                  'Copy URL',
+                  () => copyToClipboard(context, _fullUrl, label: 'URL copied'),
+                ),
+                _iconAction(
+                  Icons.terminal,
+                  'Copy as cURL',
+                  () => copyToClipboard(
+                    context,
+                    _curl(),
+                    label: 'cURL command copied',
+                  ),
+                ),
+                if (ep.method == HttpMethodType.get)
+                  _iconAction(
+                    Icons.open_in_new,
+                    'Open in browser',
+                    _openInBrowser,
+                  ),
+                const SizedBox(width: 4),
+                FilledButton.icon(
+                  onPressed: widget.running && !_sending ? _send : null,
+                  icon: _sending
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.play_arrow_rounded, size: 18),
+                  label: const Text('Send'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!widget.running)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              color: scheme.errorContainer.withValues(alpha: 0.25),
+              child: Text(
+                'Start the server to send a live test request.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          if (_hasBody && widget.running)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    onTap: () => setState(() => _expanded = !_expanded),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _expanded ? Icons.expand_less : Icons.expand_more,
+                            size: 16,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Request body',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_expanded)
+                    TextField(
+                      controller: _bodyCtrl,
+                      maxLines: 4,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12.5,
+                      ),
+                      decoration: const InputDecoration(isDense: true),
+                    ),
+                ],
+              ),
+            ),
+          if (_result != null) _ResultPanel(result: _result!),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconAction(IconData icon, String tip, VoidCallback onTap) {
+    return IconButton(
+      tooltip: tip,
+      visualDensity: VisualDensity.compact,
+      iconSize: 17,
+      icon: Icon(icon),
+      onPressed: onTap,
+    );
+  }
+
+  String _curl() {
+    final b = StringBuffer(
+      'curl -X ${ep.method == HttpMethodType.any ? 'GET' : ep.method.label} ',
+    );
+    b.write("'$_fullUrl'");
+    if (_hasBody) {
+      b.write(" \\\n  -H 'Content-Type: application/json'");
+      b.write(" \\\n  -d '${_bodyCtrl.text.replaceAll("'", r"\'")}'");
+    }
+    if (ep.requireAuth) {
+      b.write(" \\\n  -H '${ep.authHeader}: Bearer YOUR_TOKEN'");
+    }
+    return b.toString();
+  }
+
+  Future<void> _openInBrowser() async {
+    try {
+      await Process.run('xdg-open', [_fullUrl]);
+    } catch (_) {
+      if (mounted) copyToClipboard(context, _fullUrl, label: 'URL copied');
+    }
+  }
+
+  Future<void> _send() async {
+    setState(() {
+      _sending = true;
+      _result = null;
+    });
+    final sw = Stopwatch()..start();
+    try {
+      final uri = Uri.parse(_fullUrl);
+      final method = ep.method == HttpMethodType.any ? 'GET' : ep.method.label;
+      final req = http.Request(method, uri);
+      if (_hasBody) {
+        req.headers['content-type'] = 'application/json';
+        req.body = _bodyCtrl.text;
+      }
+      if (ep.requireAuth) {
+        req.headers[ep.authHeader] = 'Bearer test-token';
+      }
+      final streamed = await req.send().timeout(const Duration(seconds: 30));
+      final res = await http.Response.fromStream(streamed);
+      sw.stop();
+      setState(() {
+        _result = _TestResult(
+          statusCode: res.statusCode,
+          durationMs: sw.elapsedMilliseconds,
+          body: _prettify(res.body, res.headers['content-type']),
+          headers: res.headers,
+        );
+      });
+    } catch (e) {
+      sw.stop();
+      setState(() {
+        _result = _TestResult(
+          statusCode: 0,
+          durationMs: sw.elapsedMilliseconds,
+          body: 'Request failed: $e',
+          headers: const {},
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  String _prettify(String body, String? contentType) {
+    if (contentType != null && contentType.contains('json')) {
+      try {
+        return const JsonEncoder.withIndent('  ').convert(jsonDecode(body));
+      } catch (_) {}
+    }
+    return body;
+  }
+}
+
+class _TestResult {
+  final int statusCode;
+  final int durationMs;
+  final String body;
+  final Map<String, String> headers;
+  _TestResult({
+    required this.statusCode,
+    required this.durationMs,
+    required this.body,
+    required this.headers,
+  });
+}
+
+class _ResultPanel extends StatelessWidget {
+  final _TestResult result;
+  const _ResultPanel({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = AppTheme.statusColor(result.statusCode);
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              StatusBadge(result.statusCode),
+              const SizedBox(width: 10),
+              Icon(Icons.schedule, size: 14, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text(
+                '${result.durationMs} ms',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              ),
+              const Spacer(),
+              Text(
+                'Response',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxHeight: 220),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: 0.25)),
+            ),
+            child: SingleChildScrollView(
+              child: SelectableText(
+                result.body,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12.5,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
