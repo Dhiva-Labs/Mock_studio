@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/endpoint.dart';
+import '../models/enums.dart';
+import '../models/load_flow.dart';
 import '../models/mock_project.dart';
 import '../models/request_log.dart';
 import '../services/mock_server.dart';
@@ -9,6 +13,7 @@ import '../services/network_info.dart';
 import '../services/sample_data.dart';
 import '../services/storage_service.dart';
 import '../services/tunnel_service.dart';
+import 'flow_run_session.dart';
 
 /// Central application state: projects, selection, running servers and logs.
 class AppState extends ChangeNotifier {
@@ -19,6 +24,7 @@ class AppState extends ChangeNotifier {
   final Map<String, MockServer> _servers = {};
   final Map<String, List<RequestLog>> _logs = {};
   final List<RecordedCall> pendingRecordings = [];
+  final Map<String, FlowRunSession> _flowRuns = {};
 
   String? selectedProjectId;
   String? selectedEndpointId;
@@ -27,6 +33,12 @@ class AppState extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.system;
   bool guideMode = true; // extra hints for newcomers
   int maxLogsPerProject = 500;
+  static const maxPendingRecordings = 200;
+
+  /// Request bursts would otherwise rebuild the whole widget tree once per
+  /// request; log updates are coalesced into one notify per window instead.
+  static const _logNotifyInterval = Duration(milliseconds: 120);
+  Timer? _logNotifyTimer;
 
   bool _loaded = false;
   bool get isLoaded => _loaded;
@@ -175,8 +187,9 @@ class AppState extends ChangeNotifier {
 
   Future<MockProject> importProjectFile(String path) async {
     final project = await _storage.loadFile(path);
-    // Give it a fresh identity so importing a copy doesn't clash.
-    final fresh = MockProject.fromJson(project.toJson());
+    // Give it a fresh identity so importing a copy doesn't clash: projects,
+    // servers and logs are all keyed by id.
+    final fresh = MockProject.fromJson(project.toJson()..remove('id'));
     fresh.name = '${project.name} (imported)';
     await addProject(fresh);
     return fresh;
@@ -220,6 +233,60 @@ class AppState extends ChangeNotifier {
     await saveProject(project);
   }
 
+  // ---- flows --------------------------------------------------------------
+
+  FlowRunSession flowSession(String flowId) =>
+      _flowRuns.putIfAbsent(flowId, FlowRunSession.new);
+
+  bool isFlowRunning(String flowId) => _flowRuns[flowId]?.isRunning ?? false;
+
+  /// The URL a flow targets: its override, else this project's local server.
+  String flowBaseUrl(MockProject project, LoadFlow flow) =>
+      flow.targetUrl.trim().isNotEmpty
+      ? flow.targetUrl.trim()
+      : 'http://127.0.0.1:${project.port}';
+
+  Future<LoadFlow> addFlow(MockProject project, LoadFlow flow) async {
+    project.flows.add(flow);
+    await saveProject(project);
+    return flow;
+  }
+
+  Future<void> deleteFlow(MockProject project, LoadFlow flow) async {
+    _flowRuns.remove(flow.id)?.dispose();
+    project.flows.removeWhere((f) => f.id == flow.id);
+    await saveProject(project);
+  }
+
+  /// Builds a "smoke" flow that walks every enabled endpoint once per round.
+  static LoadFlow flowFromEndpoints(MockProject project) {
+    String concrete(String path) => path
+        .replaceAllMapped(RegExp(r':([A-Za-z0-9_]+)'), (_) => '{{vu}}')
+        .replaceAll('**', 'sample/path')
+        .replaceAll('*', 'sample');
+    return LoadFlow(
+      name: 'All endpoints',
+      steps: [
+        for (final ep in project.endpoints.where((e) => e.enabled))
+          FlowStep(
+            name: ep.name,
+            method: ep.method == HttpMethodType.any ? 'GET' : ep.method.label,
+            path: concrete(ep.normalizedPath),
+            headers: ep.requireAuth ? {ep.authHeader: 'Bearer test'} : {},
+            body:
+                const {
+                  HttpMethodType.post,
+                  HttpMethodType.put,
+                  HttpMethodType.patch,
+                }.contains(ep.method)
+                ? '{"name": "{{faker.name}}"}'
+                : '',
+            expectStatus: '',
+          ),
+      ],
+    );
+  }
+
   // ---- server control -----------------------------------------------------
 
   bool isRunning(String projectId) => _servers[projectId]?.isRunning ?? false;
@@ -235,7 +302,13 @@ class AppState extends ChangeNotifier {
       onLog: (log) => _appendLog(project.id, log),
       onRecord: (call) {
         pendingRecordings.add(call);
-        notifyListeners();
+        if (pendingRecordings.length > maxPendingRecordings) {
+          pendingRecordings.removeRange(
+            0,
+            pendingRecordings.length - maxPendingRecordings,
+          );
+        }
+        _scheduleLogNotify();
       },
     );
     try {
@@ -258,8 +331,9 @@ class AppState extends ChangeNotifier {
     if (server != null) {
       await server.stop();
       _servers.remove(project.id);
-      // Stop tunnel if it was pointing at this server.
-      if (tunnel.status == TunnelStatus.running) {
+      // Stop the tunnel only if it was pointing at this server.
+      if (tunnel.status != TunnelStatus.stopped &&
+          tunnel.port == project.port) {
         await tunnel.stop();
       }
       notifyListeners();
@@ -277,7 +351,12 @@ class AppState extends ChangeNotifier {
     if (list.length > maxLogsPerProject) {
       list.removeRange(maxLogsPerProject, list.length);
     }
-    notifyListeners();
+    _scheduleLogNotify();
+  }
+
+  void _scheduleLogNotify() {
+    if (_logNotifyTimer?.isActive ?? false) return;
+    _logNotifyTimer = Timer(_logNotifyInterval, notifyListeners);
   }
 
   void clearLogs(String projectId) {
@@ -292,6 +371,10 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _logNotifyTimer?.cancel();
+    for (final r in _flowRuns.values) {
+      r.dispose();
+    }
     for (final s in _servers.values) {
       s.stop();
     }

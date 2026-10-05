@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import 'endpoint.dart';
+import 'load_flow.dart';
 
 const _uuid = Uuid();
 
@@ -31,6 +32,9 @@ class MockProject {
 
   List<Endpoint> endpoints;
 
+  /// Scripted concurrent traffic scenarios run against this project.
+  List<LoadFlow> flows;
+
   /// File path on disk once saved (not serialised into the file itself).
   String? filePath;
 
@@ -45,10 +49,12 @@ class MockProject {
     this.globalDelayMs = 0,
     Map<String, String>? globalHeaders,
     List<Endpoint>? endpoints,
+    List<LoadFlow>? flows,
     this.filePath,
   }) : id = id ?? _uuid.v4(),
        globalHeaders = globalHeaders ?? {},
-       endpoints = endpoints ?? [];
+       endpoints = endpoints ?? [],
+       flows = flows ?? [];
 
   Map<String, dynamic> toJson() => {
     'mockstudioVersion': 1,
@@ -62,6 +68,7 @@ class MockProject {
     'globalDelayMs': globalDelayMs,
     'globalHeaders': globalHeaders,
     'endpoints': endpoints.map((e) => e.toJson()).toList(),
+    if (flows.isNotEmpty) 'flows': flows.map((f) => f.toJson()).toList(),
   };
 
   factory MockProject.fromJson(Map<String, dynamic> j, {String? filePath}) =>
@@ -84,6 +91,11 @@ class MockProject {
                 ?.map((e) => Endpoint.fromJson(e as Map<String, dynamic>))
                 .toList() ??
             [],
+        flows:
+            (j['flows'] as List?)
+                ?.map((e) => LoadFlow.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [],
         filePath: filePath,
       );
 
@@ -98,6 +110,7 @@ class MockProject {
     globalDelayMs: globalDelayMs,
     globalHeaders: Map.of(globalHeaders),
     endpoints: endpoints,
+    flows: flows,
     filePath: filePath,
   );
 }

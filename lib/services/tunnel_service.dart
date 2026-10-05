@@ -16,6 +16,10 @@ class TunnelService {
   TunnelStatus status = TunnelStatus.stopped;
   String? publicUrl;
   String? lastError;
+
+  /// Local port the active tunnel forwards to, so stopping one project's
+  /// server doesn't tear down a tunnel serving another.
+  int? port;
   TunnelProvider provider = TunnelProvider.cloudflared;
 
   final _statusController = StreamController<void>.broadcast();
@@ -44,6 +48,7 @@ class TunnelService {
       return;
     }
     this.provider = provider;
+    this.port = port;
     status = TunnelStatus.starting;
     publicUrl = null;
     lastError = null;
@@ -56,6 +61,9 @@ class TunnelService {
         await _startNgrok(port);
       }
     } catch (e) {
+      // Don't leave a half-started ngrok/cloudflared process behind.
+      _process?.kill();
+      _process = null;
       status = TunnelStatus.error;
       lastError = e.toString();
       _statusController.add(null);
@@ -66,7 +74,7 @@ class TunnelService {
     _process = await Process.start('cloudflared', [
       'tunnel',
       '--url',
-      'http://localhost:$port',
+      'http://127.0.0.1:$port', // server binds IPv4 only
       '--no-autoupdate',
     ]);
     _pipe(_process!.stdout);
@@ -138,6 +146,7 @@ class TunnelService {
   Future<void> stop() async {
     status = TunnelStatus.stopped;
     publicUrl = null;
+    port = null;
     _process?.kill();
     _process = null;
     _statusController.add(null);

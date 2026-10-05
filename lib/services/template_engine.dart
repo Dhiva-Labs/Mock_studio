@@ -47,6 +47,9 @@ class TemplateContext {
 class TemplateEngine {
   static final _rng = Random();
   static final _token = RegExp(r'\{\{\s*([^}]+?)\s*\}\}');
+  static final _randomInt = RegExp(
+    r'^randomInt\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)$',
+  );
 
   /// Public regex used by the UI to detect/strip template tokens.
   static RegExp get tokenPattern => _token;
@@ -136,6 +139,8 @@ class TemplateEngine {
   /// Renders [template], substituting tokens from [ctx]. Unknown tokens are
   /// left as-is so the user can see the mistake in the response.
   static String render(String template, TemplateContext ctx) {
+    // Most bodies/headers have no tokens; skip the regex pass entirely.
+    if (!template.contains('{{')) return template;
     return template.replaceAllMapped(_token, (m) {
       final expr = m.group(1)!.trim();
       final value = _resolve(expr, ctx);
@@ -145,9 +150,7 @@ class TemplateEngine {
 
   static String? _resolve(String expr, TemplateContext ctx) {
     // randomInt(a,b)
-    final ri = RegExp(
-      r'^randomInt\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)$',
-    ).firstMatch(expr);
+    final ri = _randomInt.firstMatch(expr);
     if (ri != null) {
       final a = int.parse(ri.group(1)!);
       final b = int.parse(ri.group(2)!);
@@ -210,7 +213,10 @@ class TemplateEngine {
     return null;
   }
 
-  static String? _jsonPath(Map<String, dynamic>? root, String path) {
+  /// Reads a dotted path (with numeric list indices) out of decoded JSON.
+  static String? jsonPath(Object? root, String path) => _jsonPath(root, path);
+
+  static String? _jsonPath(Object? root, String path) {
     if (root == null) return null;
     dynamic current = root;
     for (final part in path.split('.')) {

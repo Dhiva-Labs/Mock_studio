@@ -1,0 +1,95 @@
+# Snap Store packaging for Mock Studio.
+#
+# Same pattern as BranchPilot and SecureShell Go: `plugin: flutter` + the
+# `gnome` extension under strict confinement, which passes automated store
+# review and can be released to a channel immediately.
+#
+#   snapcraft --use-lxd
+#   snapcraft upload --release=stable mockstudio_<version>_amd64.snap
+name: mockstudio
+title: Mock Studio
+base: core22
+version: '1.1.0'
+summary: Production mock server - design endpoints, share them on LAN or online
+description: |
+  Mock Studio lets you design HTTP endpoints visually and serve them from a
+  real server in seconds - friendly enough for non-developers, deep enough
+  for API teams.
+
+  - Route patterns with :params and wildcards, conditional rules, response
+    sequences and weighted random responses
+  - Templating: path/query/header/body values, uuid, timestamps, fake data
+  - Latency and fault injection (dropped connections, malformed bodies)
+  - Live request log, proxy passthrough and record-to-mock
+  - OpenAPI / Swagger and Postman import
+  - Flows: multi-step, concurrent traffic scenarios with live throughput,
+    error rate and p50/p95/p99 latency
+  - Share on your LAN with a QR code for phones
+
+  Note on confinement: public tunnels start the cloudflared or ngrok
+  command-line tools, which a strictly confined snap cannot run from the
+  host. LAN sharing works normally; for public tunnels use the .deb from
+  GitHub releases or run the tunnel tool yourself against the server port.
+
+  A Dhiva Labs project.
+
+grade: stable
+confinement: strict
+icon: snap/gui/mockstudio.png
+license: MIT
+website: https://github.com/Dhiva-Labs/Mock_studio
+source-code: https://github.com/Dhiva-Labs/Mock_studio
+issues: https://github.com/Dhiva-Labs/Mock_studio/issues
+contact: dhivakar1010@gmail.com
+
+architectures:
+  - build-on: amd64
+
+apps:
+  mockstudio:
+    command: mock_studio
+    extensions:
+      - gnome
+    desktop: usr/share/applications/mockstudio.desktop
+    plugs:
+      - home
+      - removable-media
+      - network
+      # The mock server listens on a port for LAN and local clients.
+      - network-bind
+
+parts:
+  mockstudio:
+    plugin: flutter
+    source: .
+    flutter-target: lib/main.dart
+    # A build/ left by a host-side `flutter build linux` carries a
+    # CMakeCache.txt naming host paths, which CMake refuses to reuse.
+    override-pull: |
+      craftctl default
+      rm -rf build .dart_tool .flutter .pub-cache dist parts prime stage \
+        linux/flutter/ephemeral
+    # The flutter plugin fetches the SDK but not the GTK toolchain.
+    build-packages:
+      - clang
+      - cmake
+      - ninja-build
+      - pkg-config
+      - libgtk-3-dev
+      - liblzma-dev
+      - curl
+      - unzip
+      - xz-utils
+      - git
+    stage-packages:
+      - libgtk-3-0
+
+  desktop-assets:
+    plugin: dump
+    source: snap/gui
+    organize:
+      mockstudio.desktop: usr/share/applications/mockstudio.desktop
+      mockstudio.png: usr/share/icons/hicolor/256x256/apps/mockstudio.png
+    stage:
+      - usr/share/applications/mockstudio.desktop
+      - usr/share/icons/hicolor/256x256/apps/mockstudio.png

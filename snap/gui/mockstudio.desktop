@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Mock Studio
+Comment=Production mock server - design endpoints, expose them on LAN or a public tunnel
+Exec=mockstudio
+Icon=${SNAP}/usr/share/icons/hicolor/256x256/apps/mockstudio.png
+Terminal=false
+Type=Application
+Categories=Development;Network;
+Keywords=mock;server;API;REST;HTTP;endpoint;stub;testing;

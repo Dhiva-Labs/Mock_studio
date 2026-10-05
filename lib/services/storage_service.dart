@@ -11,6 +11,9 @@ import '../models/mock_project.dart';
 class StorageService {
   Directory? _projectsDir;
 
+  /// Pending write per file, so overlapping debounced saves run in order.
+  final Map<String, Future<void>> _writes = {};
+
   Future<Directory> _dir() async {
     if (_projectsDir != null) return _projectsDir!;
     final base = await getApplicationDocumentsDirectory();
@@ -61,9 +64,7 @@ class StorageService {
       '${_slug(project.name)}-${project.id.substring(0, 8)}.json',
     );
     final encoder = const JsonEncoder.withIndent('  ');
-    await File(
-      project.filePath!,
-    ).writeAsString(encoder.convert(project.toJson()));
+    await _atomicWrite(project.filePath!, encoder.convert(project.toJson()));
     return project.filePath!;
   }
 
@@ -73,6 +74,24 @@ class StorageService {
     await File(
       destinationPath,
     ).writeAsString(encoder.convert(project.toJson()));
+  }
+
+  /// Writes via a temp file + rename so a crash mid-save can't leave a
+  /// truncated project file (which loadAll would silently skip).
+  Future<void> _atomicWrite(String path, String contents) {
+    final previous = _writes[path] ?? Future<void>.value();
+    late final Future<void> next;
+    next = previous
+        .then((_) async {
+          final tmp = File('$path.tmp');
+          await tmp.writeAsString(contents, flush: true);
+          await tmp.rename(path);
+        })
+        .whenComplete(() {
+          if (identical(_writes[path], next)) _writes.remove(path);
+        });
+    _writes[path] = next;
+    return next;
   }
 
   Future<void> delete(MockProject project) async {

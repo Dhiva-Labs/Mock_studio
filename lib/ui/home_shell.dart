@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import 'dialogs/dialogs.dart';
 import 'editor/endpoint_editor.dart';
+import 'flows/flows_view.dart';
 import 'logs/logs_view.dart';
 import 'settings/project_settings_view.dart';
 import 'share/share_view.dart';
@@ -12,7 +13,7 @@ import 'sidebar/project_switcher.dart';
 import 'sidebar/server_control_card.dart';
 import 'widgets/helpers.dart';
 
-enum MainTab { editor, logs, share, settings }
+enum MainTab { editor, logs, flows, share, settings }
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -94,6 +95,8 @@ class _HomeShellState extends State<HomeShell> {
         );
       case MainTab.logs:
         return const LogsView();
+      case MainTab.flows:
+        return const FlowsView();
       case MainTab.share:
         return const ShareView();
       case MainTab.settings:
@@ -313,6 +316,12 @@ class _MainTabBar extends StatelessWidget {
                 : null,
             selected: tab == MainTab.logs,
             onTap: () => onChanged(MainTab.logs),
+          ),
+          _TabButton(
+            icon: Icons.account_tree_outlined,
+            label: 'Flows',
+            selected: tab == MainTab.flows,
+            onTap: () => onChanged(MainTab.flows),
           ),
           _TabButton(
             icon: Icons.share_outlined,

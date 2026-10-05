@@ -10,14 +10,16 @@ class MockStudioApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
+    // Select only what the root needs so log traffic doesn't rebuild it.
+    final themeMode = context.select<AppState, ThemeMode>((a) => a.themeMode);
+    final isLoaded = context.select<AppState, bool>((a) => a.isLoaded);
     return MaterialApp(
       title: 'Mock Studio',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: app.themeMode,
-      home: app.isLoaded ? const HomeShell() : const _SplashScreen(),
+      themeMode: themeMode,
+      home: isLoaded ? const HomeShell() : const _SplashScreen(),
     );
   }
 }

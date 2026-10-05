@@ -30,6 +30,13 @@ sequences, latency, faults, templating and proxying.
   the URL / a ready-made `curl` command / open it in the browser.
 - **Live request log** — every request in real time with a full detail pane
   (headers, body, matched endpoint, timing), searchable and error-filterable.
+- **Flows (concurrent load)** — chain several endpoints into a user journey
+  (login → fetch → create…), capture values from one response for the next
+  (`token = body.token` → `{{vars.token}}`), then run it with many virtual users
+  at once: iterations or a fixed duration, ramp-up, think time, and *one by one*
+  or *all at once* step modes. Live requests/sec, error rate, p50/p95/p99 per
+  step and a throughput chart. Runs in a background isolate with fixed-memory
+  latency histograms, and can target any base URL, not just the mock.
 - **Share & expose** — localhost, LAN URLs (with a QR code for phones), and a
   one-click public tunnel via **cloudflared** (no account) or **ngrok**.
 - **Proxy & record** — forward unmatched requests to a real API and convert the
@@ -66,5 +73,6 @@ Flutter (Material 3) · `shelf` HTTP server · Provider · file-based JSON stora
 flutter test
 ```
 
-Covers route matching, templating, response resolution, and a live end-to-end
-server integration test.
+Covers route matching, templating, response resolution, the flow runner
+(chaining, parallel mode, stop, isolate), proxy/fault regressions, and live
+end-to-end server integration tests.

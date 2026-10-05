@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:shelf/shelf.dart' as shelf;
@@ -42,7 +43,25 @@ class MockServer {
   final void Function(RecordedCall call)? onRecord;
 
   HttpServer? _server;
+  http.Client? _proxyClient;
   final _random = Random();
+
+  /// Bodies kept in the request log are clipped to this many characters so a
+  /// few large payloads can't balloon memory (500 logs x N MB each).
+  static const maxLoggedBodyChars = 64 * 1024;
+
+  /// Hop-by-hop / encoding headers that must not be forwarded verbatim.
+  static const _hopHeaders = {
+    'connection',
+    'keep-alive',
+    'proxy-connection',
+    'transfer-encoding',
+    'upgrade',
+    'te',
+    'trailer',
+    'content-length',
+    'content-encoding',
+  };
 
   MockServer({required this.project, required this.onLog, this.onRecord});
 
@@ -65,6 +84,8 @@ class MockServer {
   Future<void> stop() async {
     await _server?.close(force: true);
     _server = null;
+    _proxyClient?.close();
+    _proxyClient = null;
   }
 
   Future<shelf.Response> _handle(shelf.Request request) async {
@@ -73,8 +94,10 @@ class MockServer {
     final path = '/${request.url.path}';
     final reqHeaders = _flattenHeaders(request.headersAll);
 
-    // Read the body once (used for templating/rules and logging).
-    final reqBody = await request.readAsString();
+    // Read the body once (used for templating/rules and logging). Decode
+    // leniently so binary uploads don't make the handler throw.
+    final reqBytes = await _readBytes(request);
+    final reqBody = utf8.decode(reqBytes, allowMalformed: true);
 
     // CORS preflight.
     if (method == 'OPTIONS' && project.corsEnabled) {
@@ -126,6 +149,7 @@ class MockServer {
         started,
         request,
         reqHeaders,
+        reqBytes,
         reqBody,
         method,
         path,
@@ -242,6 +266,7 @@ class MockServer {
     DateTime started,
     shelf.Request request,
     Map<String, String> reqHeaders,
+    List<int> reqBytes,
     String reqBody,
     String method,
     String path,
@@ -254,19 +279,31 @@ class MockServer {
           '$base$path${request.url.query.isEmpty ? '' : '?${request.url.query}'}',
         );
         final proxyReq = http.Request(method, target);
-        proxyReq.bodyBytes = utf8.encode(reqBody);
+        proxyReq.bodyBytes = reqBytes;
         reqHeaders.forEach((k, v) {
-          if (k.toLowerCase() != 'host') proxyReq.headers[k] = v;
+          final lk = k.toLowerCase();
+          if (lk != 'host' && !_hopHeaders.contains(lk)) {
+            proxyReq.headers[k] = v;
+          }
         });
-        final streamed = await proxyReq.send().timeout(
-          const Duration(seconds: 30),
-        );
+        // One pooled client per server keeps connections alive across calls.
+        final client = _proxyClient ??= http.Client();
+        final streamed = await client
+            .send(proxyReq)
+            .timeout(const Duration(seconds: 30));
         final proxied = await http.Response.fromStream(streamed);
 
-        final headers = <String, String>{}..addAll(proxied.headers);
-        headers.remove('transfer-encoding');
-        headers.remove('content-length');
+        // The client transparently decompresses, so drop content-encoding and
+        // length; forward the raw bytes so binary payloads aren't corrupted.
+        final headers = <String, String>{};
+        proxied.headers.forEach((k, v) {
+          if (!_hopHeaders.contains(k.toLowerCase())) headers[k] = v;
+        });
         if (project.corsEnabled) headers.addAll(_corsHeaders());
+        final proxiedText = utf8.decode(
+          proxied.bodyBytes,
+          allowMalformed: true,
+        );
 
         if (project.recordProxy && onRecord != null) {
           onRecord!(
@@ -274,15 +311,15 @@ class MockServer {
               method,
               path,
               proxied.statusCode,
-              proxied.body,
-              proxied.headers,
+              proxiedText,
+              headers,
             ),
           );
         }
 
         final res = shelf.Response(
           proxied.statusCode,
-          body: proxied.body,
+          body: proxied.bodyBytes,
           headers: headers,
         );
         _emitLog(
@@ -293,7 +330,7 @@ class MockServer {
           null,
           proxied.statusCode,
           headers,
-          proxied.body,
+          proxiedText,
           true,
           false,
           'Proxied → $base',
@@ -417,14 +454,6 @@ class MockServer {
         );
         return res;
       case FaultType.connectionReset:
-        try {
-          // Hijack the underlying socket and destroy it to simulate a reset.
-          request.hijack((channel) {
-            channel.sink.close();
-          });
-        } catch (_) {
-          // If hijack is unavailable, fall back to an abrupt 502.
-        }
         _emitLog(
           started,
           request,
@@ -438,6 +467,12 @@ class MockServer {
           false,
           'Fault: connection reset',
         );
+        if (request.canHijack) {
+          // Take over the socket and close it without a response. hijack()
+          // throws a HijackException that shelf_io must see, so don't catch it.
+          request.hijack((channel) => channel.sink.close());
+        }
+        // Hijack unavailable: fall back to an abrupt 502.
         return shelf.Response(502, body: '');
     }
   }
@@ -451,6 +486,18 @@ class MockServer {
   };
 
   Map<String, String> _globalHeaders() => Map.of(project.globalHeaders);
+
+  static Future<List<int>> _readBytes(shelf.Request request) async {
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in request.read()) {
+      builder.add(chunk);
+    }
+    return builder.takeBytes();
+  }
+
+  static String _clip(String s) => s.length <= maxLoggedBodyChars
+      ? s
+      : '${s.substring(0, maxLoggedBodyChars)}\n… [truncated ${s.length - maxLoggedBodyChars} chars]';
 
   Map<String, String> _flattenHeaders(Map<String, List<String>> h) {
     return h.map((k, v) => MapEntry(k, v.join(', ')));
@@ -477,13 +524,13 @@ class MockServer {
         path: '/${request.url.path}',
         query: request.url.query,
         requestHeaders: reqHeaders,
-        requestBody: reqBody,
+        requestBody: _clip(reqBody),
         matchedEndpointId: matched?.id,
         matchedEndpointName: matched?.name,
         responseLabel: responseLabel,
         statusCode: status,
         responseHeaders: resHeaders,
-        responseBody: resBody,
+        responseBody: _clip(resBody),
         proxied: proxied,
         unmatched: unmatched,
         durationMs: DateTime.now().difference(started).inMilliseconds,

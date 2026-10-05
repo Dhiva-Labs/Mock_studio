@@ -1,3 +1,14 @@
+mockstudio (1.1.0) noble; urgency=medium
+
+  * Flows tab: multi-step, concurrent traffic scenarios with live
+    throughput, error rate and latency percentiles.
+  * Lower memory and CPU under traffic: capped log bodies, batched UI
+    updates, cached route matching and templating, pooled proxy client.
+  * Fixes for proxy gzip/binary bodies, connection-reset faults, binary
+    request bodies, project import ids, tunnel shutdown and atomic saves.
+
+ -- Dhivakar R <dhivakar1010@gmail.com>  Tue, 06 Oct 2026 02:30:00 +0530
+
 mockstudio (1.0.0) noble; urgency=medium
 
   * Initial release of Mock Studio by dhiva labs: a production-grade mock

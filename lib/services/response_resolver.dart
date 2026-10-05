@@ -10,6 +10,20 @@ import 'template_engine.dart';
 class ResponseResolver {
   static final _rng = Random();
 
+  /// Compiled rule regexes, so a pattern isn't recompiled on every request.
+  /// A null entry remembers an invalid pattern.
+  static final _regexCache = <String, RegExp?>{};
+
+  static RegExp? _regex(String pattern) {
+    if (_regexCache.containsKey(pattern)) return _regexCache[pattern];
+    if (_regexCache.length >= 256) _regexCache.clear();
+    RegExp? re;
+    try {
+      re = RegExp(pattern);
+    } catch (_) {}
+    return _regexCache[pattern] = re;
+  }
+
   static MockResponse select(
     Endpoint endpoint,
     TemplateContext ctx,
@@ -69,11 +83,7 @@ class ResponseResolver {
         return actual != null && actual.contains(c.value);
       case ConditionOperator.regex:
         if (actual == null) return false;
-        try {
-          return RegExp(c.value).hasMatch(actual);
-        } catch (_) {
-          return false;
-        }
+        return _regex(c.value)?.hasMatch(actual) ?? false;
       case ConditionOperator.greaterThan:
         final a = num.tryParse(actual ?? '');
         final b = num.tryParse(c.value);
