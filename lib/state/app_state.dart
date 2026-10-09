@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../theme/app_theme.dart';
+import '../ui/widgets/help_tip.dart';
 import '../models/endpoint.dart';
 import '../models/enums.dart';
 import '../models/load_flow.dart';
@@ -31,6 +33,10 @@ class AppState extends ChangeNotifier {
 
   List<String> lanAddresses = [];
   ThemeMode themeMode = ThemeMode.system;
+  AppThemeId themeId = AppThemeId.teal;
+
+  /// Explanation cards when pointing at fields, buttons and badges.
+  bool hoverHelp = true;
   bool guideMode = true; // extra hints for newcomers
   int maxLogsPerProject = 500;
   static const maxPendingRecordings = 200;
@@ -54,7 +60,10 @@ class AppState extends ChangeNotifier {
     final themeIndex = prefs.getInt('themeMode') ?? 0;
     themeMode =
         ThemeMode.values[themeIndex.clamp(0, ThemeMode.values.length - 1)];
+    themeId = AppThemeIdX.fromString(prefs.getString('themeId'));
     guideMode = prefs.getBool('guideMode') ?? true;
+    hoverHelp = prefs.getBool('hoverHelp') ?? true;
+    hoverHelpEnabled.value = hoverHelp;
 
     lanAddresses = await NetworkInfo.lanAddresses();
 
@@ -82,6 +91,21 @@ class AppState extends ChangeNotifier {
     themeMode = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('themeMode', mode.index);
+    notifyListeners();
+  }
+
+  Future<void> setThemeId(AppThemeId id) async {
+    themeId = id;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('themeId', id.name);
+    notifyListeners();
+  }
+
+  Future<void> setHoverHelp(bool on) async {
+    hoverHelp = on;
+    hoverHelpEnabled.value = on;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hoverHelp', on);
     notifyListeners();
   }
 

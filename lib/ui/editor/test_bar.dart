@@ -9,7 +9,9 @@ import '../../models/enums.dart';
 import '../../models/mock_project.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/badges.dart';
+import '../widgets/help_tip.dart';
 import '../widgets/helpers.dart';
+import '../widgets/responsive.dart';
 
 /// A "try it" bar under the endpoint header. Shows the call URL and can send a
 /// live request to the running server, displaying the response inline.
@@ -74,6 +76,10 @@ class _TestBarState extends State<TestBar> {
   String get _fullUrl =>
       '$_baseUrl${_pathCtrl.text.startsWith('/') ? '' : '/'}${_pathCtrl.text}';
 
+  String get _anyNote => ep.method == HttpMethodType.any
+      ? ' ANY endpoints are tested with GET.'
+      : '';
+
   bool get _hasBody =>
       ep.method == HttpMethodType.post ||
       ep.method == HttpMethodType.put ||
@@ -93,74 +99,8 @@ class _TestBarState extends State<TestBar> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-            child: Row(
-              children: [
-                MethodBadge(ep.method, compact: true),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _pathCtrl,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      prefixText: _baseUrl,
-                      prefixStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12.5,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      filled: false,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 12.5,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _iconAction(
-                  Icons.copy,
-                  'Copy URL',
-                  () => copyToClipboard(context, _fullUrl, label: 'URL copied'),
-                ),
-                _iconAction(
-                  Icons.terminal,
-                  'Copy as cURL',
-                  () => copyToClipboard(
-                    context,
-                    _curl(),
-                    label: 'cURL command copied',
-                  ),
-                ),
-                if (ep.method == HttpMethodType.get)
-                  _iconAction(
-                    Icons.open_in_new,
-                    'Open in browser',
-                    _openInBrowser,
-                  ),
-                const SizedBox(width: 4),
-                FilledButton.icon(
-                  onPressed: widget.running && !_sending ? _send : null,
-                  icon: _sending
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.play_arrow_rounded, size: 18),
-                  label: const Text('Send'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                  ),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, box) => _urlRow(context, box.maxWidth < 520),
             ),
           ),
           if (!widget.running)
@@ -169,7 +109,8 @@ class _TestBarState extends State<TestBar> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               color: scheme.errorContainer.withValues(alpha: 0.25),
               child: Text(
-                'Start the server to send a live test request.',
+                'Start the server to send a live test request: tap Stopped '
+                'at the top, or Start server.',
                 style: TextStyle(
                   fontSize: 11.5,
                   color: scheme.onSurfaceVariant,
@@ -184,7 +125,11 @@ class _TestBarState extends State<TestBar> {
                 children: [
                   InkWell(
                     onTap: () => setState(() => _expanded = !_expanded),
-                    child: Padding(
+                    child: Container(
+                      // A 48 px touch target on phones.
+                      constraints: BoxConstraints(
+                        minHeight: isPhone(context) ? 48 : 0,
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(
                         children: [
@@ -200,6 +145,13 @@ class _TestBarState extends State<TestBar> {
                               fontSize: 12,
                               color: scheme.onSurfaceVariant,
                             ),
+                          ),
+                          const HelpTip(
+                            'JSON sent as the body of the test request. Edit '
+                            'it to try rules that check body fields.',
+                            title: 'Request body',
+                            example: '{"name": "Test"}',
+                            size: 14,
                           ),
                         ],
                       ),
@@ -224,10 +176,107 @@ class _TestBarState extends State<TestBar> {
     );
   }
 
+  /// The test URL with copy, cURL, open and Send. [narrow]: the actions go
+  /// on a second line and the base URL drops its scheme to leave room for
+  /// the path.
+  Widget _urlRow(BuildContext context, bool narrow) {
+    final scheme = Theme.of(context).colorScheme;
+    final url = Expanded(
+      child: HelpHover(
+        'The address of this endpoint on your computer. :params and '
+        'wildcards are filled with sample values; edit the path to try '
+        'others.',
+        title: 'Test URL',
+        example: '/users/7?page=2',
+        child: TextField(
+          controller: _pathCtrl,
+          decoration: InputDecoration(
+            isDense: true,
+            prefixText: narrow ? 'localhost:${widget.project.port}' : _baseUrl,
+            prefixStyle: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 12.5,
+              color: scheme.onSurfaceVariant,
+            ),
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            filled: false,
+            contentPadding: EdgeInsets.zero,
+          ),
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 12.5),
+          onChanged: (_) => setState(() {}),
+        ),
+      ),
+    );
+    final actions = [
+      _iconAction(
+        Icons.copy,
+        'Copy URL',
+        () => copyToClipboard(context, _fullUrl, label: 'URL copied'),
+      ),
+      _iconAction(
+        Icons.terminal,
+        'Copy as cURL command',
+        () => copyToClipboard(context, _curl(), label: 'cURL command copied'),
+      ),
+      if (ep.method == HttpMethodType.get)
+        _iconAction(Icons.open_in_new, 'Open in browser', _openInBrowser),
+    ];
+    final send = HelpHover(
+      widget.running
+          ? 'Sends a real request to your running mock server and shows the '
+                'response below. Required auth headers are added for '
+                'you.$_anyNote'
+          : 'Start the server first: tap Stopped at the top, or Start server '
+                'in the side panel.',
+      title: 'Send test request',
+      child: FilledButton.icon(
+        onPressed: widget.running && !_sending ? _send : null,
+        icon: _sending
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.play_arrow_rounded, size: 18),
+        label: const Text('Send'),
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        ),
+      ),
+    );
+    if (narrow) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              MethodBadge(ep.method, compact: true),
+              const SizedBox(width: 8),
+              url,
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(children: [...actions, const Spacer(), send]),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        MethodBadge(ep.method, compact: true),
+        const SizedBox(width: 8),
+        url,
+        const SizedBox(width: 8),
+        ...actions,
+        const SizedBox(width: 4),
+        send,
+      ],
+    );
+  }
+
   Widget _iconAction(IconData icon, String tip, VoidCallback onTap) {
     return IconButton(
       tooltip: tip,
-      visualDensity: VisualDensity.compact,
       iconSize: 17,
       icon: Icon(icon),
       onPressed: onTap,
@@ -346,19 +395,42 @@ class _ResultPanel extends StatelessWidget {
             children: [
               StatusBadge(result.statusCode),
               const SizedBox(width: 10),
-              Icon(Icons.schedule, size: 14, color: scheme.onSurfaceVariant),
-              const SizedBox(width: 4),
-              Text(
-                '${result.durationMs} ms',
-                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              HelpHover(
+                'Round-trip time for the test request, including any '
+                'simulated delay.',
+                title: 'Response time',
+                example: '850 ms',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.schedule,
+                      size: 14,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${result.durationMs} ms',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const Spacer(),
-              Text(
-                'Response',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: scheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+              HelpHover(
+                'What the mock server sent back for your test request. JSON '
+                'is shown indented for readability.',
+                title: 'Test response',
+                child: Text(
+                  'Response',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],

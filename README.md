@@ -41,7 +41,13 @@ sequences, latency, faults, templating and proxying.
   one-click public tunnel via **cloudflared** (no account) or **ngrok**.
 - **Proxy & record** — forward unmatched requests to a real API and convert the
   captured responses into mocks with one click.
+- **Postman import** — turn a Postman collection into mock endpoints: every
+  saved example becomes a response, several examples become conditional rules,
+  and folders and auth requirements carry over. Import into a new or an
+  existing project.
 - **OpenAPI / Swagger import** — generate a full mock from a spec (JSON or YAML).
+- **Hover help** — every field, button and badge explains itself with a short
+  card and an example; turn it off in Settings once you know your way around.
 - **Auth simulation**, **CORS**, **global headers/delay**, multiple projects on
   different ports simultaneously.
 - **Git-friendly storage** — each project is a readable JSON file you can commit
@@ -55,7 +61,9 @@ flutter run -d linux      # or build: flutter build linux
 ```
 
 On first launch a sample project ("My First Mock API") is created so you can
-explore immediately. Toggle **Guide** in the top bar for extra hints.
+explore immediately. Toggle **Guide** on the left rail for extra hints, and
+point at any field for an explanation. Teal (light/dark) and Graphite themes
+are in **Settings**; phones get a bottom-navigation layout.
 
 ## Public tunnels
 
@@ -71,6 +79,8 @@ Flutter (Material 3) · `shelf` HTTP server · Provider · file-based JSON stora
 
 ```bash
 flutter test
+flutter test integration_test/layout_sweep_test.dart -d linux   # every screen at phone, tablet and desktop sizes
+flutter test integration_test/screenshots_test.dart -d linux    # regenerate screenshots/
 ```
 
 Covers route matching, templating, response resolution, the flow runner

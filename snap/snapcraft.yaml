@@ -9,7 +9,7 @@
 name: mockstudio
 title: Mock Studio
 base: core22
-version: '1.1.0'
+version: '1.2.0'
 summary: Production mock server - design endpoints, share them on LAN or online
 description: |
   Mock Studio lets you design HTTP endpoints visually and serve them from a
@@ -21,10 +21,13 @@ description: |
   - Templating: path/query/header/body values, uuid, timestamps, fake data
   - Latency and fault injection (dropped connections, malformed bodies)
   - Live request log, proxy passthrough and record-to-mock
-  - OpenAPI / Swagger and Postman import
+  - Postman import: requests become endpoints and saved examples become
+    responses; OpenAPI / Swagger import too
   - Flows: multi-step, concurrent traffic scenarios with live throughput,
     error rate and p50/p95/p99 latency
   - Share on your LAN with a QR code for phones
+  - Hover help on every field, Teal light/dark and Graphite themes, and a
+    phone-friendly layout
 
   Note on confinement: public tunnels start the cloudflared or ngrok
   command-line tools, which a strictly confined snap cannot run from the

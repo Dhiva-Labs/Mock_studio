@@ -4,6 +4,9 @@ import '../../models/enums.dart';
 import '../../models/mock_response.dart';
 import '../../services/template_engine.dart';
 import 'response_card.dart';
+import '../../theme/app_theme.dart';
+import '../widgets/help_tip.dart';
+import '../widgets/responsive.dart';
 
 /// The response body editor: a monospace field with template-variable
 /// insertion, JSON formatting/validation, and a preview of a rendered sample.
@@ -86,78 +89,97 @@ class _BodyEditorState extends State<BodyEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Toolbar.
-        Row(
+        // Toolbar: wraps onto two lines on narrow screens.
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            _ToolbarButton(
-              icon: Icons.add,
-              label: 'Insert variable',
-              onTap: null,
-              menu: PopupMenuButton<String>(
-                tooltip: 'Insert a dynamic variable',
-                onSelected: _insertToken,
-                itemBuilder: (_) => TemplateEngine.palette
-                    .map(
-                      (p) => PopupMenuItem(
-                        value: p.token,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              p.token,
-                              style: const TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
+            PopupMenuButton<String>(
+              // The HelpHover on the pill below replaces the plain tooltip.
+              tooltip: '',
+              onSelected: _insertToken,
+              itemBuilder: (_) => TemplateEngine.palette
+                  .map(
+                    (p) => PopupMenuItem(
+                      value: p.token,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            p.token,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
                             ),
-                            Text(
-                              p.desc,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: scheme.onSurfaceVariant,
-                              ),
+                          ),
+                          Text(
+                            p.desc,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    )
-                    .toList(),
+                    ),
+                  )
+                  .toList(),
+              child: HelpHover(
+                'Adds a placeholder at the cursor. Each time the response '
+                'is sent it is replaced with request data or a random '
+                'value.',
+                title: 'Insert variable',
+                example: '{{params.id}} → 42 for /users/42',
                 child: _pill(context, Icons.data_object, 'Insert variable'),
               ),
             ),
-            const SizedBox(width: 8),
             if (isJson)
-              InkWell(
-                borderRadius: BorderRadius.circular(7),
-                onTap: _jsonError == null ? _format : null,
-                child: _pill(context, Icons.auto_fix_high, 'Format JSON'),
+              HelpHover(
+                'Re-indents the JSON so it is easier to read. Works only when '
+                'the JSON is valid.',
+                title: 'Format JSON',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(7),
+                  onTap: _jsonError == null ? _format : null,
+                  child: _pill(context, Icons.auto_fix_high, 'Format JSON'),
+                ),
               ),
-            const Spacer(),
             if (isJson)
-              Row(
-                children: [
-                  Icon(
-                    _jsonError == null
-                        ? Icons.check_circle
-                        : Icons.error_outline,
-                    size: 14,
-                    color: _jsonError == null
-                        ? const Color(0xFF16A34A)
-                        : scheme.error,
+              HelpHover(
+                'The body is checked as you type. {{...}} placeholders count '
+                'as values, so they are not errors.',
+                title: 'JSON check',
+                example: '{"id": {{params.id}}}',
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _jsonError == null
+                            ? Icons.check_circle
+                            : Icons.error_outline,
+                        size: 14,
+                        color: _jsonError == null
+                            ? AppTheme.success
+                            : scheme.error,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _jsonError == null ? 'Valid JSON' : 'Invalid JSON',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: _jsonError == null
+                              ? AppTheme.success
+                              : scheme.error,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _jsonError == null ? 'Valid JSON' : 'Invalid JSON',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: _jsonError == null
-                          ? const Color(0xFF16A34A)
-                          : scheme.error,
-                    ),
-                  ),
-                ],
+                ),
               ),
           ],
         ),
@@ -210,8 +232,10 @@ class _BodyEditorState extends State<BodyEditor> {
 
   Widget _pill(BuildContext context, IconData icon, String label) {
     final scheme = Theme.of(context).colorScheme;
+    // 44 px tall on phones so it is easy to tap.
+    final vertical = isPhone(context) ? 13.0 : 6.0;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: vertical),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(7),
@@ -233,25 +257,6 @@ class _BodyEditorState extends State<BodyEditor> {
         ],
       ),
     );
-  }
-}
-
-class _ToolbarButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-  final Widget? menu;
-  const _ToolbarButton({
-    required this.icon,
-    required this.label,
-    this.onTap,
-    this.menu,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (menu != null) return menu!;
-    return InkWell(onTap: onTap, child: const SizedBox());
   }
 }
 
@@ -291,9 +296,12 @@ class _PreviewRowState extends State<_PreviewRow> {
         InkWell(
           borderRadius: BorderRadius.circular(6),
           onTap: () => setState(() => _open = !_open),
-          child: Padding(
+          child: Container(
+            // A 48 px touch target on phones.
+            constraints: BoxConstraints(minHeight: isPhone(context) ? 48 : 0),
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   _open
@@ -303,12 +311,18 @@ class _PreviewRowState extends State<_PreviewRow> {
                   color: scheme.primary,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  _open ? 'Hide preview' : 'Preview with sample data',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: scheme.primary,
-                    fontWeight: FontWeight.w600,
+                HelpHover(
+                  'Shows the body with placeholders filled in from a sample '
+                  'request. Real requests use their own values.',
+                  title: 'Preview',
+                  example: 'params.id = 42, query.page = 1',
+                  child: Text(
+                    _open ? 'Hide preview' : 'Preview with sample data',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],

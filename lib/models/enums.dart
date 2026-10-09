@@ -187,7 +187,7 @@ enum FaultType {
   /// Close the socket immediately with no response.
   connectionReset,
 
-  /// Return an empty body with a 200.
+  /// Send the response's status code with an empty body.
   emptyResponse,
 
   /// Return malformed/garbage bytes.

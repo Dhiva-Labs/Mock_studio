@@ -34,6 +34,10 @@ class Endpoint {
   /// Optional description shown to the user; also used as docs.
   String description;
 
+  /// Folder path in the endpoint tree, segments joined by '/' ('' = root).
+  /// Organisational only; it does not affect routing.
+  String folder;
+
   /// Runtime cursor for sequence strategy (not persisted).
   int sequenceCursor = 0;
 
@@ -50,6 +54,7 @@ class Endpoint {
     this.requireAuth = false,
     this.authHeader = 'Authorization',
     this.description = '',
+    this.folder = '',
   }) : id = id ?? _uuid.v4(),
        responses = responses ?? [MockResponse()];
 
@@ -72,6 +77,7 @@ class Endpoint {
     requireAuth: requireAuth,
     authHeader: authHeader,
     description: description,
+    folder: folder,
   );
 
   Map<String, dynamic> toJson() => {
@@ -87,6 +93,7 @@ class Endpoint {
     'requireAuth': requireAuth,
     'authHeader': authHeader,
     'description': description,
+    if (folder.isNotEmpty) 'folder': folder,
   };
 
   factory Endpoint.fromJson(Map<String, dynamic> j) => Endpoint(
@@ -106,5 +113,6 @@ class Endpoint {
     requireAuth: (j['requireAuth'] as bool?) ?? false,
     authHeader: (j['authHeader'] as String?) ?? 'Authorization',
     description: (j['description'] as String?) ?? '',
+    folder: (j['folder'] as String?) ?? '',
   );
 }

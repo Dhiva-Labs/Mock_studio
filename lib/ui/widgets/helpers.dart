@@ -130,7 +130,7 @@ class CodeBox extends StatelessWidget {
           if (copyable && text.isNotEmpty)
             IconButton(
               tooltip: 'Copy',
-              visualDensity: VisualDensity.compact,
+              // Density from the theme: compact on desktop, 48 px on phones.
               iconSize: 16,
               icon: const Icon(Icons.copy_all_outlined),
               onPressed: () => copyToClipboard(context, text),

@@ -9,7 +9,9 @@ import '../../models/enums.dart';
 import '../../models/load_flow.dart';
 import '../../models/mock_project.dart';
 import '../../state/app_state.dart';
+import '../widgets/help_tip.dart';
 import '../widgets/helpers.dart';
+import '../widgets/responsive.dart';
 import 'flow_results.dart';
 
 /// Flows: scripted multi-endpoint journeys run by many concurrent virtual
@@ -26,40 +28,244 @@ class _FlowsViewState extends State<FlowsView> {
 
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
+    // Rebuild when the list of flows changes, not on every logged request.
+    context.select<AppState, (String?, int)>((a) {
+      final p = a.selectedProject;
+      return (
+        p?.id,
+        Object.hashAll([
+          for (final f in p?.flows ?? const <LoadFlow>[])
+            Object.hash(f.id, f.name, f.steps.length, f.virtualUsers),
+        ]),
+      );
+    });
+    final app = context.read<AppState>();
     final scheme = Theme.of(context).colorScheme;
     final project = app.selectedProject!;
     final flows = project.flows;
     final selected =
         flows.where((f) => f.id == _selectedId).firstOrNull ??
         flows.firstOrNull;
-
-    return Row(
-      children: [
-        SizedBox(
-          width: 240,
-          child: _FlowList(
+    void select(String id) => setState(() => _selectedId = id);
+    final editor = selected == null
+        ? _EmptyFlows(onCreate: (f) => select(f.id))
+        : _FlowEditor(
+            key: ValueKey(selected.id),
             project: project,
-            selectedId: selected?.id,
-            onSelect: (id) => setState(() => _selectedId = id),
+            flow: selected,
+          );
+
+    return LayoutBuilder(
+      builder: (context, box) {
+        if (box.maxWidth < 640) {
+          // Phones and narrow windows: pick the flow from a bar on top.
+          return Column(
+            children: [
+              _FlowPicker(
+                project: project,
+                selected: selected,
+                onSelect: select,
+              ),
+              const Divider(height: 1),
+              Expanded(child: editor),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            SizedBox(
+              width: 240,
+              child: _FlowList(
+                project: project,
+                selectedId: selected?.id,
+                onSelect: select,
+              ),
+            ),
+            Container(
+              width: 1,
+              color: scheme.outlineVariant.withValues(alpha: 0.6),
+            ),
+            Expanded(child: editor),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The "+" menu: a blank flow or one built from every endpoint.
+Widget _newFlowButton(BuildContext context, ValueChanged<String> onSelect) =>
+    PopupMenuButton<bool>(
+      tooltip: 'New flow',
+      icon: const Icon(Icons.add),
+      onSelected: (fromEndpoints) async {
+        final f = await _createFlow(context, fromEndpoints: fromEndpoints);
+        onSelect(f.id);
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: false,
+          child: _blankFlowHover(
+            child: const ListTile(
+              dense: true,
+              leading: Icon(Icons.note_add_outlined),
+              title: Text('Blank flow'),
+            ),
           ),
         ),
-        Container(
-          width: 1,
-          color: scheme.outlineVariant.withValues(alpha: 0.6),
-        ),
-        Expanded(
-          child: selected == null
-              ? _EmptyFlows(onCreate: (f) => setState(() => _selectedId = f.id))
-              : _FlowEditor(
-                  key: ValueKey(selected.id),
-                  project: project,
-                  flow: selected,
-                ),
+        PopupMenuItem(
+          value: true,
+          child: _fromEndpointsHover(
+            child: const ListTile(
+              dense: true,
+              leading: Icon(Icons.playlist_add),
+              title: Text('From all endpoints'),
+            ),
+          ),
         ),
       ],
     );
+
+/// Duplicate or delete [flow].
+Widget _flowActions(
+  AppState app,
+  MockProject project,
+  LoadFlow flow,
+  ValueChanged<String> onSelect,
+) => PopupMenuButton<String>(
+  tooltip: 'Duplicate or delete this flow',
+  icon: const Icon(Icons.more_horiz, size: 18),
+  onSelected: (v) async {
+    if (v == 'dup') {
+      final copy = await app.addFlow(project, flow.copy());
+      onSelect(copy.id);
+    } else if (v == 'del') {
+      await app.deleteFlow(project, flow);
+    }
+  },
+  itemBuilder: (_) => const [
+    PopupMenuItem(value: 'dup', child: Text('Duplicate')),
+    PopupMenuItem(value: 'del', child: Text('Delete')),
+  ],
+);
+
+/// Narrow layouts: the flow list as a drop-down with the same actions.
+class _FlowPicker extends StatelessWidget {
+  final MockProject project;
+  final LoadFlow? selected;
+  final ValueChanged<String> onSelect;
+  const _FlowPicker({
+    required this.project,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.read<AppState>();
+    final scheme = Theme.of(context).colorScheme;
+    final flow = selected;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+      child: Row(
+        children: [
+          if (flow == null)
+            Expanded(
+              child: _sectionLabel(
+                context,
+                'Flows',
+                'A flow is a load test for your own mocks. Many virtual users '
+                    'call your endpoints at the same time, and you see how '
+                    'fast and how reliably they answer.',
+                example: '50 users log in, then GET /orders, 20 times each',
+              ),
+            )
+          else ...[
+            ListenableBuilder(
+              listenable: app.flowSession(flow.id),
+              builder: (context, _) {
+                final running = app.isFlowRunning(flow.id);
+                return Icon(
+                  running ? Icons.bolt : Icons.account_tree_outlined,
+                  size: 18,
+                  color: running ? scheme.primary : scheme.onSurfaceVariant,
+                );
+              },
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: flow.id,
+                  isExpanded: true,
+                  items: [
+                    for (final f in project.flows)
+                      DropdownMenuItem(
+                        value: f.id,
+                        child: Text(
+                          f.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                  ],
+                  onChanged: (id) => id == null ? null : onSelect(id),
+                ),
+              ),
+            ),
+            _flowActions(app, project, flow, onSelect),
+          ],
+          _newFlowButton(context, onSelect),
+        ],
+      ),
+    );
   }
+}
+
+Widget _fromEndpointsHover({required Widget child}) => HelpHover(
+  'Adds one step for every enabled endpoint, so you can load-test the whole '
+  'mock at once. Path parameters are filled with the virtual user number.',
+  title: 'Build from endpoints',
+  example: '/users/:id becomes /users/{{vu}}',
+  child: child,
+);
+
+Widget _blankFlowHover({required Widget child}) => HelpHover(
+  'Starts with a single step that you edit or add to.',
+  title: 'Blank flow',
+  example: 'GET /health',
+  child: child,
+);
+
+/// Same look as [SectionLabel], with a help icon beside the text.
+Widget _sectionLabel(
+  BuildContext context,
+  String text,
+  String help, {
+  String? example,
+}) {
+  final scheme = Theme.of(context).colorScheme;
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 8, top: 4),
+    child: Row(
+      children: [
+        Flexible(
+          child: Text(
+            text.toUpperCase(),
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        HelpTip(help, title: text, example: example, size: 14),
+      ],
+    ),
+  );
 }
 
 Future<LoadFlow> _createFlow(
@@ -97,36 +303,17 @@ class _FlowList extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 10, 6, 6),
           child: Row(
             children: [
-              const Expanded(child: SectionLabel('Flows')),
-              PopupMenuButton<bool>(
-                tooltip: 'New flow',
-                icon: const Icon(Icons.add),
-                onSelected: (fromEndpoints) async {
-                  final f = await _createFlow(
-                    context,
-                    fromEndpoints: fromEndpoints,
-                  );
-                  onSelect(f.id);
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: false,
-                    child: ListTile(
-                      dense: true,
-                      leading: Icon(Icons.note_add_outlined),
-                      title: Text('Blank flow'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: true,
-                    child: ListTile(
-                      dense: true,
-                      leading: Icon(Icons.playlist_add),
-                      title: Text('From all endpoints'),
-                    ),
-                  ),
-                ],
+              Expanded(
+                child: _sectionLabel(
+                  context,
+                  'Flows',
+                  'A flow is a load test for your own mocks. Many virtual '
+                      'users call your endpoints at the same time, and you see '
+                      'how fast and how reliably they answer.',
+                  example: '50 users log in, then GET /orders, 20 times each',
+                ),
               ),
+              _newFlowButton(context, onSelect),
             ],
           ),
         ),
@@ -160,31 +347,20 @@ class _FlowList extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Text(
-                          '${f.steps.length} step${f.steps.length == 1 ? '' : 's'}'
-                          ' · ${f.virtualUsers} VU${running ? ' · running' : ''}',
-                          style: const TextStyle(fontSize: 11.5),
+                        subtitle: HelpHover(
+                          'How many requests one round has, and how many '
+                          'simulated users (VU, virtual users) run it at the '
+                          'same time.',
+                          title: 'Steps and virtual users',
+                          example: '3 steps · 50 VU',
+                          child: Text(
+                            '${f.steps.length} step${f.steps.length == 1 ? '' : 's'}'
+                            ' · ${f.virtualUsers} VU${running ? ' · running' : ''}',
+                            style: const TextStyle(fontSize: 11.5),
+                          ),
                         ),
                         onTap: () => onSelect(f.id),
-                        trailing: PopupMenuButton<String>(
-                          tooltip: 'More',
-                          icon: const Icon(Icons.more_horiz, size: 18),
-                          onSelected: (v) async {
-                            if (v == 'dup') {
-                              final copy = await app.addFlow(project, f.copy());
-                              onSelect(copy.id);
-                            } else if (v == 'del') {
-                              await app.deleteFlow(project, f);
-                            }
-                          },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: 'dup',
-                              child: Text('Duplicate'),
-                            ),
-                            PopupMenuItem(value: 'del', child: Text('Delete')),
-                          ],
-                        ),
+                        trailing: _flowActions(app, project, f, onSelect),
                       ),
                     );
                   },
@@ -225,18 +401,23 @@ class _EmptyFlows extends StatelessWidget {
             Wrap(
               spacing: 10,
               children: [
-                FilledButton.icon(
-                  onPressed: () async =>
-                      onCreate(await _createFlow(context, fromEndpoints: true)),
-                  icon: const Icon(Icons.playlist_add),
-                  label: const Text('Build from endpoints'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async => onCreate(
-                    await _createFlow(context, fromEndpoints: false),
+                _fromEndpointsHover(
+                  child: FilledButton.icon(
+                    onPressed: () async => onCreate(
+                      await _createFlow(context, fromEndpoints: true),
+                    ),
+                    icon: const Icon(Icons.playlist_add),
+                    label: const Text('Build from endpoints'),
                   ),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Blank flow'),
+                ),
+                _blankFlowHover(
+                  child: OutlinedButton.icon(
+                    onPressed: () async => onCreate(
+                      await _createFlow(context, fromEndpoints: false),
+                    ),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Blank flow'),
+                  ),
                 ),
               ],
             ),
@@ -296,14 +477,21 @@ class _FlowEditorState extends State<_FlowEditor> {
     final guide = context.select<AppState, bool>((a) => a.guideMode);
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isPhone(context) ? 12 : 20),
       children: [
         Row(
           children: [
             Expanded(
               child: TextFormField(
                 initialValue: flow.name,
-                decoration: const InputDecoration(labelText: 'Flow name'),
+                decoration: const InputDecoration(
+                  labelText: 'Flow name',
+                  suffixIcon: HelpTip(
+                    'A label for this flow in the list on the left.',
+                    title: 'Flow name',
+                    example: 'Checkout journey',
+                  ),
+                ),
                 onChanged: (v) => _mutate(() => flow.name = v, rebuild: false),
               ),
             ),
@@ -311,17 +499,30 @@ class _FlowEditorState extends State<_FlowEditor> {
             ListenableBuilder(
               listenable: session,
               builder: (context, _) => session.isRunning
-                  ? FilledButton.tonalIcon(
-                      onPressed: session.stop,
-                      icon: const Icon(Icons.stop_rounded),
-                      label: const Text('Stop'),
+                  ? HelpHover(
+                      'Ends the run early. Requests already in flight finish, '
+                      'and the results so far stay on screen.',
+                      title: 'Stop the run',
+                      child: FilledButton.tonalIcon(
+                        onPressed: session.stop,
+                        icon: const Icon(Icons.stop_rounded),
+                        label: const Text('Stop'),
+                      ),
                     )
-                  : FilledButton.icon(
-                      onPressed: flow.steps.any((s) => s.enabled)
-                          ? () => _run(app)
-                          : null,
-                      icon: const Icon(Icons.play_arrow_rounded),
-                      label: const Text('Run flow'),
+                  : HelpHover(
+                      flow.steps.any((s) => s.enabled)
+                          ? 'Starts the load test with the settings below. If '
+                                'it targets this project and the server is '
+                                'stopped, the server is started for you.'
+                          : 'Add or enable at least one step first.',
+                      title: 'Run flow',
+                      child: FilledButton.icon(
+                        onPressed: flow.steps.any((s) => s.enabled)
+                            ? () => _run(app)
+                            : null,
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: const Text('Run flow'),
+                      ),
                     ),
             ),
           ],
@@ -341,6 +542,10 @@ class _FlowEditorState extends State<_FlowEditor> {
           context,
           icon: Icons.speed,
           title: 'Load profile',
+          help:
+              'How much traffic to send: how many users, for how long, and how '
+              'quickly they join.',
+          example: '50 users for 30 s, joining over 10 s',
           child: _LoadProfile(
             flow: flow,
             port: widget.project.port,
@@ -352,6 +557,11 @@ class _FlowEditorState extends State<_FlowEditor> {
           context,
           icon: Icons.format_list_numbered,
           title: 'Steps',
+          help:
+              'The requests each virtual user makes in one round (an '
+              'iteration), top to bottom. Untick a step to skip it without '
+              'deleting it.',
+          example: 'POST /login, then GET /orders',
           trailing: _AddStepButton(
             endpoints: widget.project.endpoints,
             onAdd: (s) => _mutate(() => flow.steps.add(s)),
@@ -388,6 +598,9 @@ class _FlowEditorState extends State<_FlowEditor> {
           context,
           icon: Icons.insights,
           title: 'Results',
+          help:
+              'Live numbers from the latest run. They reset when you run the '
+              'flow again and are not saved.',
           child: FlowResults(session: session),
         ),
       ],
@@ -400,11 +613,14 @@ Widget _section(
   required IconData icon,
   required String title,
   required Widget child,
+  String? help,
+  String? example,
   Widget? trailing,
 }) {
   final scheme = Theme.of(context).colorScheme;
+  final side = isPhone(context) ? 12.0 : 16.0;
   return Container(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+    padding: EdgeInsets.fromLTRB(side, 12, side, 16),
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
@@ -416,8 +632,22 @@ Widget _section(
           children: [
             Icon(icon, size: 18, color: scheme.primary),
             const SizedBox(width: 8),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const Spacer(),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: help == null
+                    ? Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      )
+                    : LabelWithHelp(
+                        title,
+                        help,
+                        example: example,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+              ),
+            ),
             ?trailing,
           ],
         ),
@@ -442,14 +672,25 @@ class _LoadProfile extends StatelessWidget {
     String label,
     int value,
     ValueChanged<int> set, {
+    required String help,
+    String? example,
     String? helper,
     int max = 100000,
+    double width = 160,
   }) {
     return SizedBox(
-      width: 150,
+      width: width,
       child: TextFormField(
         initialValue: '$value',
-        decoration: InputDecoration(labelText: label, helperText: helper),
+        decoration: InputDecoration(
+          labelText: label,
+          helperText: helper,
+          suffixIcon: HelpTip(help, title: label, example: example),
+          suffixIconConstraints: const BoxConstraints(
+            minWidth: 30,
+            minHeight: 30,
+          ),
+        ),
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         onChanged: (v) {
@@ -461,7 +702,32 @@ class _LoadProfile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    // Two fields per line, or one on very narrow screens.
+    builder: (context, box) =>
+        _build(context, box.maxWidth < 332 ? box.maxWidth : 160),
+  );
+
+  Widget _build(BuildContext context, double w) {
+    final modes = SegmentedButton<StepMode>(
+      segments: [
+        for (final m in StepMode.values)
+          ButtonSegment(
+            value: m,
+            label: _modeHover(m, Text(m.label)),
+            icon: _modeHover(
+              m,
+              Icon(
+                m == StepMode.sequential
+                    ? Icons.linear_scale
+                    : Icons.call_split,
+              ),
+            ),
+          ),
+      ],
+      selected: {flow.mode},
+      onSelectionChanged: (s) => onChanged(() => flow.mode = s.first),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -470,35 +736,63 @@ class _LoadProfile extends StatelessWidget {
           runSpacing: 12,
           children: [
             _num(
+              width: w,
               'Virtual users',
               flow.virtualUsers,
               (v) => flow.virtualUsers = v < 1 ? 1 : v,
               helper: 'Run at the same time',
               max: 1000,
+              help:
+                  'How many simulated users run the steps at the same time, '
+                  'from 1 to 1000. Each one repeats the whole list of steps.',
+              example: '50',
             ),
             _num(
+              width: w,
               'Iterations / user',
               flow.iterations,
               (v) => flow.iterations = v < 1 ? 1 : v,
               helper: flow.durationSec > 0 ? 'Ignored (duration set)' : null,
+              help:
+                  'How many rounds each user makes through all the steps. '
+                  'Ignored when a duration is set.',
+              example: '5 users × 10 iterations × 3 steps = 150 requests',
             ),
             _num(
+              width: w,
               'Duration (s)',
               flow.durationSec,
               (v) => flow.durationSec = v,
               helper: '0 = use iterations',
+              help:
+                  'Run for this many seconds instead of a set number of '
+                  'iterations. Users repeat the steps until time is up; '
+                  'ramp-up counts toward it.',
+              example: '30 (0 = use iterations)',
             ),
             _num(
+              width: w,
               'Ramp-up (s)',
               flow.rampUpSec,
               (v) => flow.rampUpSec = v,
               helper: 'Stagger user starts',
+              help:
+                  'Spread user start times over this many seconds instead of '
+                  'starting everyone at once, to see how the mock copes as '
+                  'load grows.',
+              example: '10 users over 10 s = 1 new user per second',
             ),
             _num(
+              width: w,
               'Think time (ms)',
               flow.thinkTimeMs,
               (v) => flow.thinkTimeMs = v,
               helper: 'Pause between steps',
+              help:
+                  'How long each user waits after a step, like a person '
+                  'reading a page. In "All at once" mode the pause comes after '
+                  'each round instead.',
+              example: '500 = half a second',
             ),
           ],
         ),
@@ -508,21 +802,10 @@ class _LoadProfile extends StatelessWidget {
           runSpacing: 10,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            SegmentedButton<StepMode>(
-              segments: [
-                for (final m in StepMode.values)
-                  ButtonSegment(
-                    value: m,
-                    label: Text(m.label),
-                    icon: Icon(
-                      m == StepMode.sequential
-                          ? Icons.linear_scale
-                          : Icons.call_split,
-                    ),
-                  ),
-              ],
-              selected: {flow.mode},
-              onSelectionChanged: (s) => onChanged(() => flow.mode = s.first),
+            // Scrolls sideways if even one line is too narrow for it.
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: modes,
             ),
             if (flow.mode == StepMode.sequential)
               Row(
@@ -533,7 +816,15 @@ class _LoadProfile extends StatelessWidget {
                     onChanged: (v) => onChanged(() => flow.stopOnFailure = v),
                   ),
                   const SizedBox(width: 6),
-                  const Text('Stop iteration on first failed step'),
+                  const Flexible(
+                    child: LabelWithHelp(
+                      'Stop iteration on first failed step',
+                      'When a step fails, the user skips the rest of that round '
+                          'and starts the next one. Use it when later steps '
+                          'depend on an earlier one.',
+                      example: 'login fails, so GET /orders is skipped',
+                    ),
+                  ),
                 ],
               ),
           ],
@@ -548,6 +839,13 @@ class _LoadProfile extends StatelessWidget {
                 'Leave empty to hit this project. Set a URL to load-test '
                 'another server or a real API you own.',
             floatingLabelBehavior: FloatingLabelBehavior.always,
+            suffixIcon: const HelpTip(
+              'The address each step\'s path is added to. Leave it empty to '
+              'test this project\'s mock. A step whose path is a full '
+              'http:// or https:// URL ignores it.',
+              title: 'Target base URL',
+              example: 'http://localhost:3000 + /users',
+            ),
           ),
           style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
           onChanged: (v) => onChanged(() => flow.targetUrl = v, rebuild: false),
@@ -557,6 +855,22 @@ class _LoadProfile extends StatelessWidget {
   }
 }
 
+Widget _modeHover(StepMode mode, Widget child) => mode == StepMode.sequential
+    ? HelpHover(
+        'Runs the steps in order, each waiting for the previous reply. A '
+        'later step can use values extracted from an earlier one.',
+        title: 'One by one',
+        example: 'POST /login, then GET /me with {{vars.token}}',
+        child: child,
+      )
+    : HelpHover(
+        'Sends every step of a round at the same moment, to test bursts of '
+        'parallel calls. Extracted values are not passed between steps.',
+        title: 'All at once',
+        example: 'GET /a, /b and /c together',
+        child: child,
+      );
+
 class _AddStepButton extends StatelessWidget {
   final List<Endpoint> endpoints;
   final ValueChanged<FlowStep> onAdd;
@@ -565,7 +879,7 @@ class _AddStepButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<Endpoint?>(
-      tooltip: 'Add step',
+      tooltip: 'Add a step from one of your endpoints or a custom request',
       onSelected: (ep) => onAdd(
         ep == null
             ? FlowStep(path: '/')
@@ -584,10 +898,16 @@ class _AddStepButton extends StatelessWidget {
       itemBuilder: (_) => [
         const PopupMenuItem(
           value: null,
-          child: ListTile(
-            dense: true,
-            leading: Icon(Icons.add),
-            title: Text('Custom request'),
+          child: HelpHover(
+            'A blank step you fill in yourself, for example to call a path or '
+            'URL that is not one of your endpoints.',
+            title: 'Custom request',
+            example: 'GET https://example.com/health',
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.add),
+              title: Text('Custom request'),
+            ),
           ),
         ),
         if (endpoints.isNotEmpty) const PopupMenuDivider(),
@@ -600,9 +920,12 @@ class _AddStepButton extends StatelessWidget {
             ),
           ),
       ],
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: 8,
+          vertical: isPhone(context) ? 12 : 4,
+        ),
+        child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.add, size: 18),
@@ -662,7 +985,6 @@ class _StepCardState extends State<_StepCard> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    const mono = TextStyle(fontFamily: 'monospace', fontSize: 12.5);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
@@ -673,178 +995,302 @@ class _StepCardState extends State<_StepCard> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
       ),
-      child: Column(
-        children: [
-          Row(
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final narrow = box.maxWidth < 600;
+          return Column(
             children: [
-              SizedBox(
-                width: 26,
-                child: Text(
-                  widget.sequential ? '${widget.index + 1}' : '•',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              Checkbox(
-                value: step.enabled,
-                onChanged: (v) =>
-                    widget.onChanged(() => step.enabled = v ?? true),
-              ),
-              DropdownButton<String>(
-                value: _methods.contains(step.method) ? step.method : 'GET',
-                underline: const SizedBox.shrink(),
-                isDense: true,
-                items: [
-                  for (final m in _methods)
-                    DropdownMenuItem(
-                      value: m,
-                      child: Text(
-                        m,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12.5,
-                        ),
-                      ),
-                    ),
-                ],
-                onChanged: (v) => widget.onChanged(() => step.method = v!),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  initialValue: step.path,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    hintText: '/path/{{vars.id}}',
-                  ),
-                  style: mono,
-                  onChanged: (v) =>
-                      widget.onChanged(() => step.path = v, rebuild: false),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 96,
-                child: TextFormField(
-                  initialValue: step.expectStatus,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    hintText: 'any < 400',
-                    labelText: 'Expect',
-                  ),
-                  style: mono,
-                  onChanged: (v) => widget.onChanged(
-                    () => step.expectStatus = v,
-                    rebuild: false,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: _open ? 'Hide details' : 'Headers, body & extract',
-                icon: Icon(_open ? Icons.expand_less : Icons.expand_more),
-                onPressed: () => setState(() => _open = !_open),
-              ),
-              IconButton(
-                tooltip: 'Move up',
-                icon: const Icon(Icons.arrow_upward, size: 18),
-                onPressed: widget.index > 0 ? () => widget.onMove(-1) : null,
-              ),
-              IconButton(
-                tooltip: 'Move down',
-                icon: const Icon(Icons.arrow_downward, size: 18),
-                onPressed: widget.index < widget.count - 1
-                    ? () => widget.onMove(1)
-                    : null,
-              ),
-              IconButton(
-                tooltip: 'Remove step',
-                icon: const Icon(Icons.delete_outline, size: 18),
-                onPressed: widget.onDelete,
-              ),
+              if (narrow) ..._narrowHeader(context) else _wideHeader(context),
+              if (_open) _details(narrow: box.maxWidth < 480),
             ],
-          ),
-          if (_open)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(34, 8, 8, 6),
-              child: Column(
-                children: [
-                  TextFormField(
-                    initialValue: step.name,
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      labelText: 'Step name (optional)',
-                    ),
-                    onChanged: (v) =>
-                        widget.onChanged(() => step.name = v, rebuild: false),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: _linesOf(step.headers, ': '),
-                          minLines: 3,
-                          maxLines: 6,
-                          style: mono,
-                          decoration: const InputDecoration(
-                            labelText: 'Headers',
-                            hintText: 'Authorization: Bearer {{vars.token}}',
-                            alignLabelWithHint: true,
-                          ),
-                          onChanged: (v) => widget.onChanged(
-                            () => step.headers = _parseLines(v, ':'),
-                            rebuild: false,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: _linesOf(step.extract, ' = '),
-                          minLines: 3,
-                          maxLines: 6,
-                          style: mono,
-                          decoration: InputDecoration(
-                            labelText: 'Extract into variables',
-                            hintText:
-                                'token = body.token\nid = body.items.0.id\n'
-                                'etag = header.etag',
-                            helperText: widget.sequential
-                                ? null
-                                : 'Only useful in "One by one" mode',
-                            alignLabelWithHint: true,
-                          ),
-                          onChanged: (v) => widget.onChanged(
-                            () => step.extract = _parseLines(v, '='),
-                            rebuild: false,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    initialValue: step.body,
-                    minLines: 3,
-                    maxLines: 10,
-                    style: mono,
-                    decoration: const InputDecoration(
-                      labelText: 'Body',
-                      hintText: '{"email": "{{faker.email}}"}',
-                      alignLabelWithHint: true,
-                    ),
-                    onChanged: (v) =>
-                        widget.onChanged(() => step.body = v, rebuild: false),
-                  ),
-                ],
-              ),
-            ),
-        ],
+          );
+        },
       ),
     );
   }
+
+  static const _mono = TextStyle(fontFamily: 'monospace', fontSize: 12.5);
+
+  Widget _order(BuildContext context, double width) {
+    final scheme = Theme.of(context).colorScheme;
+    return HelpHover(
+      widget.sequential
+          ? 'Steps run in this order. Use the arrows to move one.'
+          : 'In "All at once" mode steps have no order; they all start '
+                'together.',
+      title: 'Step order',
+      child: SizedBox(
+        width: width,
+        child: Text(
+          widget.sequential ? '${widget.index + 1}' : '•',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _enabled() => HelpHover(
+    'Include this step in runs. Untick it to skip the step without deleting '
+    'it.',
+    title: 'Step enabled',
+    child: Checkbox(
+      value: step.enabled,
+      onChanged: (v) => widget.onChanged(() => step.enabled = v ?? true),
+    ),
+  );
+
+  Widget _method(BuildContext context) => DropdownButton<String>(
+    value: _methods.contains(step.method) ? step.method : 'GET',
+    underline: const SizedBox.shrink(),
+    // Full height as a touch target on phones.
+    isDense: !isPhone(context),
+    items: [
+      for (final m in _methods)
+        DropdownMenuItem(
+          value: m,
+          child: HelpHover(
+            httpMethodHelp(m).message,
+            title: httpMethodHelp(m).title,
+            child: Text(
+              m,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+        ),
+    ],
+    onChanged: (v) => widget.onChanged(() => step.method = v!),
+  );
+
+  Widget _path() => TextFormField(
+    initialValue: step.path,
+    decoration: const InputDecoration(
+      isDense: true,
+      hintText: '/path/{{vars.id}}',
+      suffixIcon: HelpTip(
+        'Added to the target URL. Use {{vars.name}} for a value extracted '
+        'earlier, {{vu}} for the user number, {{iteration}} for the round, '
+        'or tokens like {{uuid}}.',
+        title: 'Path',
+        example: '/orders/{{vars.orderId}}',
+      ),
+      suffixIconConstraints: BoxConstraints(minWidth: 30, minHeight: 30),
+    ),
+    style: _mono,
+    onChanged: (v) => widget.onChanged(() => step.path = v, rebuild: false),
+  );
+
+  Widget _expect() => TextFormField(
+    initialValue: step.expectStatus,
+    decoration: const InputDecoration(
+      isDense: true,
+      hintText: 'any < 400',
+      label: LabelWithHelp(
+        'Expect',
+        'Status codes that count as success. Leave it empty to accept '
+            'anything below 400; any other code counts as failed.',
+        example: '200, 2xx or 200,201,404',
+      ),
+    ),
+    style: _mono,
+    onChanged: (v) =>
+        widget.onChanged(() => step.expectStatus = v, rebuild: false),
+  );
+
+  Widget _expandButton() => IconButton(
+    tooltip: _open ? 'Hide details' : 'Show name, headers, body and extract',
+    icon: Icon(_open ? Icons.expand_less : Icons.expand_more),
+    onPressed: () => setState(() => _open = !_open),
+  );
+
+  /// One line: everything side by side.
+  Widget _wideHeader(BuildContext context) => Row(
+    children: [
+      _order(context, 26),
+      _enabled(),
+      _method(context),
+      const SizedBox(width: 8),
+      Expanded(child: _path()),
+      const SizedBox(width: 8),
+      SizedBox(width: 96, child: _expect()),
+      _expandButton(),
+      IconButton(
+        tooltip: 'Move up',
+        icon: const Icon(Icons.arrow_upward, size: 18),
+        onPressed: widget.index > 0 ? () => widget.onMove(-1) : null,
+      ),
+      IconButton(
+        tooltip: 'Move down',
+        icon: const Icon(Icons.arrow_downward, size: 18),
+        onPressed: widget.index < widget.count - 1
+            ? () => widget.onMove(1)
+            : null,
+      ),
+      IconButton(
+        tooltip: 'Remove step',
+        icon: const Icon(Icons.delete_outline, size: 18),
+        onPressed: widget.onDelete,
+      ),
+    ],
+  );
+
+  /// Narrow: order, checkbox, method and actions on top; path and expected
+  /// status below. Moving and removing go in a menu.
+  List<Widget> _narrowHeader(BuildContext context) => [
+    Row(
+      children: [
+        _order(context, 22),
+        _enabled(),
+        _method(context),
+        const Spacer(),
+        _expandButton(),
+        PopupMenuButton<String>(
+          tooltip: 'Move or remove this step',
+          icon: const Icon(Icons.more_vert, size: 20),
+          onSelected: (v) => switch (v) {
+            'up' => widget.onMove(-1),
+            'down' => widget.onMove(1),
+            _ => widget.onDelete(),
+          },
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'up',
+              enabled: widget.index > 0,
+              child: const ListTile(
+                dense: true,
+                leading: Icon(Icons.arrow_upward),
+                title: Text('Move up'),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'down',
+              enabled: widget.index < widget.count - 1,
+              child: const ListTile(
+                dense: true,
+                leading: Icon(Icons.arrow_downward),
+                title: Text('Move down'),
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'remove',
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.delete_outline),
+                title: Text('Remove step'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+    Padding(
+      padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+      child: Row(
+        children: [
+          Expanded(child: _path()),
+          const SizedBox(width: 8),
+          SizedBox(width: 96, child: _expect()),
+        ],
+      ),
+    ),
+  ];
+
+  Widget _details({required bool narrow}) => Padding(
+    padding: EdgeInsets.fromLTRB(narrow ? 4 : 34, 8, narrow ? 4 : 8, 6),
+    child: Column(
+      children: [
+        TextFormField(
+          initialValue: step.name,
+          decoration: const InputDecoration(
+            isDense: true,
+            labelText: 'Step name (optional)',
+            suffixIcon: HelpTip(
+              'Shown in the results table. Leave it empty to use the method '
+              'and path.',
+              title: 'Step name',
+              example: 'Log in',
+            ),
+          ),
+          onChanged: (v) =>
+              widget.onChanged(() => step.name = v, rebuild: false),
+        ),
+        const SizedBox(height: 10),
+        AdaptivePair(
+          minWidth: 440,
+          spacing: 10,
+          first: TextFormField(
+            initialValue: _linesOf(step.headers, ': '),
+            minLines: 3,
+            maxLines: 6,
+            style: _mono,
+            decoration: const InputDecoration(
+              label: LabelWithHelp(
+                'Headers',
+                'Request headers, one per line as Name: value. Values can use '
+                    '{{vars.name}}, {{vu}} and tokens like {{uuid}}.',
+                example: 'Authorization: Bearer {{vars.token}}',
+              ),
+              hintText: 'Authorization: Bearer {{vars.token}}',
+              alignLabelWithHint: true,
+            ),
+            onChanged: (v) => widget.onChanged(
+              () => step.headers = _parseLines(v, ':'),
+              rebuild: false,
+            ),
+          ),
+          second: TextFormField(
+            initialValue: _linesOf(step.extract, ' = '),
+            minLines: 3,
+            maxLines: 6,
+            style: _mono,
+            decoration: InputDecoration(
+              label: const LabelWithHelp(
+                'Extract into variables',
+                'Saves values from this step\'s reply for later steps, one per '
+                    'line as name = source. Source is body.<path>, '
+                    'header.<name> or status. Values reset each iteration.',
+                example: 'token = body.token, then {{vars.token}}',
+              ),
+              hintText:
+                  'token = body.token\nid = body.items.0.id\netag = header.etag',
+              helperText: widget.sequential
+                  ? null
+                  : 'Only useful in "One by one" mode',
+              alignLabelWithHint: true,
+            ),
+            onChanged: (v) => widget.onChanged(
+              () => step.extract = _parseLines(v, '='),
+              rebuild: false,
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextFormField(
+          initialValue: step.body,
+          minLines: 3,
+          maxLines: 10,
+          style: _mono,
+          decoration: const InputDecoration(
+            label: LabelWithHelp(
+              'Body',
+              'Data sent with the request. A body starting with { or [ is '
+                  'sent as JSON unless Headers set a Content-Type. Tokens like '
+                  '{{vars.name}} work here.',
+              example: '{"email": "{{faker.email}}"}',
+            ),
+            hintText: '{"email": "{{faker.email}}"}',
+            alignLabelWithHint: true,
+          ),
+          onChanged: (v) =>
+              widget.onChanged(() => step.body = v, rebuild: false),
+        ),
+      ],
+    ),
+  );
 }

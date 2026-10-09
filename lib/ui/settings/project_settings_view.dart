@@ -10,7 +10,9 @@ import '../../models/mock_response.dart';
 import '../../services/mock_server.dart';
 import '../../state/app_state.dart';
 import '../widgets/badges.dart';
+import '../widgets/help_tip.dart';
 import '../widgets/helpers.dart';
+import '../widgets/responsive.dart';
 
 /// Project-level configuration: port, CORS, proxy/record, global delay/headers.
 class ProjectSettingsView extends StatefulWidget {
@@ -38,16 +40,31 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
 
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
+    // What this page shows from outside; logged requests don't rebuild it.
+    final (_, running, guideMode, recordings, _) = context
+        .select<AppState, (String?, bool, bool, bool, String)>((a) {
+          final p = a.selectedProject!;
+          return (
+            p.id,
+            a.isRunning(p.id),
+            a.guideMode,
+            a.pendingRecordings.isNotEmpty,
+            p.proxyBaseUrl,
+          );
+        });
+    final app = context.read<AppState>();
     final project = app.selectedProject!;
-    final running = app.isRunning(project.id);
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isPhone(context) ? 12 : 20),
       children: [
         _Card(
           icon: Icons.settings_ethernet,
           title: 'Server',
+          help:
+              'How this project\'s mock server listens: which port it uses '
+              'and whether browser apps may call it.',
+          example: 'http://localhost:${project.port}',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -73,6 +90,13 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
                       },
                     ),
                   ),
+                  const HelpTip(
+                    'The number apps add after the host to reach this mock. '
+                    'Pick one from 1024 to 65535 that nothing else uses. It '
+                    'can only change while the server is stopped.',
+                    title: 'Port',
+                    example: '8080 → http://localhost:8080',
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -83,8 +107,12 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
                   project.corsEnabled = v;
                   _save(app);
                 }),
-                title: const Text(
+                title: const LabelWithHelp(
                   'Enable CORS',
+                  'Browsers block a web page from calling a server on another '
+                      'address unless the server allows it. Keep this on when '
+                      'a web app calls this mock.',
+                  example: 'a React app on localhost:3000 calling :8080',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 subtitle: const Text(
@@ -99,10 +127,15 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
         _Card(
           icon: Icons.swap_horiz,
           title: 'Proxy passthrough',
+          help:
+              'Lets the mock stand in front of a real API: your endpoints '
+              'answer what they match, and everything else goes to the real '
+              'server.',
+          example: '/payments mocked, /users from the real API',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (app.guideMode)
+              if (guideMode)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: HintCard(
@@ -116,6 +149,13 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
                   labelText: 'Forward unmatched requests to (base URL)',
                   hintText: 'https://api.example.com',
                   prefixIcon: Icon(Icons.link, size: 18),
+                  suffixIcon: HelpTip(
+                    'A request that matches none of your endpoints is sent on '
+                    'to this server, and its real reply is passed back. Leave '
+                    'it empty to answer 404 instead.',
+                    title: 'Passthrough base URL',
+                    example: 'https://api.example.com',
+                  ),
                 ),
                 onChanged: (v) {
                   project.proxyBaseUrl = v.trim();
@@ -131,8 +171,12 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
                         project.recordProxy = v;
                         _save(app);
                       }),
-                title: const Text(
+                title: const LabelWithHelp(
                   'Record proxied responses',
+                  'While on, each reply from the real server is listed below. '
+                      'Save as mock turns one into an endpoint with the same '
+                      'method, path, status and body. Needs a base URL above.',
+                  example: 'GET /users 200 → Save as mock',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 subtitle: const Text(
@@ -140,7 +184,7 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
                   style: TextStyle(fontSize: 12.5),
                 ),
               ),
-              if (app.pendingRecordings.isNotEmpty) _RecordingsPanel(),
+              if (recordings) const _RecordingsPanel(),
             ],
           ),
         ),
@@ -148,6 +192,10 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
         _Card(
           icon: Icons.public,
           title: 'Global response settings',
+          help:
+              'Settings applied to every endpoint in this project at once, on '
+              'top of each endpoint\'s own settings.',
+          example: 'a delay and a header for all endpoints',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -157,7 +205,14 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
                   initialValue: project.globalDelayMs.toString(),
                   decoration: const InputDecoration(
                     labelText: 'Global delay (ms)',
-                    helperText: 'Added to every response',
+                    helperText: 'Added to every mocked response',
+                    suffixIcon: HelpTip(
+                      'Extra wait before each endpoint answers, on top of its '
+                      'own delay, to see how your app copes with a slow '
+                      'network. Proxied and 404 replies are not delayed.',
+                      title: 'Global delay',
+                      example: '800 = 0.8 s',
+                    ),
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -180,6 +235,10 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
         _Card(
           icon: Icons.folder_outlined,
           title: 'Storage',
+          help:
+              'Changes are saved automatically to the file below. To share '
+              'the project, use Export to file in the project menu.',
+          example: 'payments-api-1a2b3c4d.json',
           child: FutureBuilder<String>(
             future: app.projectsDir(),
             builder: (context, snap) {
@@ -206,11 +265,15 @@ class _ProjectSettingsViewState extends State<ProjectSettingsView> {
 }
 
 class _RecordingsPanel extends StatelessWidget {
+  const _RecordingsPanel();
+
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
+    final app = context.read<AppState>();
+    context.select<AppState, int>((a) => a.pendingRecordings.length);
     final scheme = Theme.of(context).colorScheme;
     final recordings = app.pendingRecordings;
+    final narrow = isPhone(context);
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(12),
@@ -226,14 +289,22 @@ class _RecordingsPanel extends StatelessWidget {
             children: [
               Icon(Icons.fiber_manual_record, size: 14, color: scheme.error),
               const SizedBox(width: 8),
-              Text(
-                '${recordings.length} recorded response${recordings.length == 1 ? '' : 's'}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: LabelWithHelp(
+                    '${recordings.length} recorded response${recordings.length == 1 ? '' : 's'}',
+                    'Real replies captured through the proxy. Up to 20 show at a '
+                        'time, and saving one as a mock removes it from this list. '
+                        'They are kept until you quit or press Clear.',
+                    example: 'POST /orders 201 → Save as mock',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
               ),
-              const Spacer(),
               TextButton(
                 onPressed: () => app.clearRecordings(),
                 child: const Text('Clear'),
@@ -263,11 +334,19 @@ class _RecordingsPanel extends StatelessWidget {
                           ),
                         ),
                       ),
-                      TextButton.icon(
-                        onPressed: () => _saveAsMock(context, app, rec),
-                        icon: const Icon(Icons.save_outlined, size: 15),
-                        label: const Text('Save as mock'),
-                      ),
+                      // Phones: icon only, to leave room for the path.
+                      if (narrow)
+                        IconButton(
+                          tooltip: 'Save as mock',
+                          onPressed: () => _saveAsMock(context, app, rec),
+                          icon: const Icon(Icons.save_outlined, size: 18),
+                        )
+                      else
+                        TextButton.icon(
+                          onPressed: () => _saveAsMock(context, app, rec),
+                          icon: const Icon(Icons.save_outlined, size: 15),
+                          label: const Text('Save as mock'),
+                        ),
                     ],
                   ),
                 ),
@@ -322,10 +401,14 @@ class _GlobalHeadersEditor extends StatefulWidget {
 class _GlobalHeadersEditorState extends State<_GlobalHeadersEditor> {
   late List<MapEntry<String, String>> _pairs;
 
+  /// Stable row keys: removing a row must not shift text into the next.
+  late List<Key> _keys;
+
   @override
   void initState() {
     super.initState();
     _pairs = widget.headers.entries.toList();
+    _keys = [for (final _ in _pairs) UniqueKey()];
   }
 
   void _sync() {
@@ -340,70 +423,103 @@ class _GlobalHeadersEditorState extends State<_GlobalHeadersEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionLabel(
-          'Global headers (added to every response)',
-          trailing: TextButton.icon(
-            onPressed: () {
-              setState(() => _pairs.add(const MapEntry('', '')));
-              widget.onMutated();
-            },
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Add'),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8, top: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: LabelWithHelp(
+                    'Global headers (added to every response)'.toUpperCase(),
+                    'Headers sent with every reply from your endpoints. '
+                    "Proxied replies don't get them.",
+                    example: 'Cache-Control: no-store',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _pairs.add(const MapEntry('', ''));
+                    _keys.add(UniqueKey());
+                  });
+                  widget.onMutated();
+                },
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add'),
+              ),
+            ],
           ),
         ),
         ..._pairs.asMap().entries.map((entry) {
           final i = entry.key;
+          final name = TextFormField(
+            initialValue: entry.value.key,
+            decoration: const InputDecoration(
+              hintText: 'Header name',
+              isDense: true,
+            ),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+            onChanged: (v) {
+              _pairs[i] = MapEntry(v, _pairs[i].value);
+              _sync();
+            },
+          );
+          final value = TextFormField(
+            initialValue: entry.value.value,
+            decoration: const InputDecoration(hintText: 'Value', isDense: true),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+            onChanged: (v) {
+              _pairs[i] = MapEntry(_pairs[i].key, v);
+              _sync();
+            },
+          );
+          final remove = IconButton(
+            tooltip: 'Remove header',
+            icon: const Icon(Icons.close, size: 16),
+            onPressed: () {
+              setState(() {
+                _pairs.removeAt(i);
+                _keys.removeAt(i);
+              });
+              _sync();
+              widget.onMutated();
+            },
+          );
           return Padding(
+            key: _keys[i],
             padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextFormField(
-                    initialValue: entry.value.key,
-                    decoration: const InputDecoration(
-                      hintText: 'Header name',
-                      isDense: true,
+            child: LayoutBuilder(
+              builder: (context, box) => box.maxWidth >= 400
+                  ? Row(
+                      children: [
+                        Expanded(flex: 2, child: name),
+                        const SizedBox(width: 8),
+                        Expanded(flex: 3, child: value),
+                        remove,
+                      ],
+                    )
+                  // Narrow: name and remove button above, value below.
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: name),
+                            remove,
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        value,
+                      ],
                     ),
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 13,
-                    ),
-                    onChanged: (v) {
-                      _pairs[i] = MapEntry(v, _pairs[i].value);
-                      _sync();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 3,
-                  child: TextFormField(
-                    initialValue: entry.value.value,
-                    decoration: const InputDecoration(
-                      hintText: 'Value',
-                      isDense: true,
-                    ),
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 13,
-                    ),
-                    onChanged: (v) {
-                      _pairs[i] = MapEntry(_pairs[i].key, v);
-                      _sync();
-                    },
-                  ),
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.close, size: 16),
-                  onPressed: () {
-                    setState(() => _pairs.removeAt(i));
-                    _sync();
-                    widget.onMutated();
-                  },
-                ),
-              ],
             ),
           );
         }),
@@ -415,15 +531,23 @@ class _GlobalHeadersEditorState extends State<_GlobalHeadersEditor> {
 class _Card extends StatelessWidget {
   final IconData icon;
   final String title;
+  final String? help;
+  final String? example;
   final Widget child;
-  const _Card({required this.icon, required this.title, required this.child});
+  const _Card({
+    required this.icon,
+    required this.title,
+    required this.child,
+    this.help,
+    this.example,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.all(isPhone(context) ? 14 : 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -431,12 +555,24 @@ class _Card extends StatelessWidget {
               children: [
                 Icon(icon, size: 18, color: scheme.primary),
                 const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
+                Flexible(
+                  child: help == null
+                      ? Text(
+                          title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        )
+                      : LabelWithHelp(
+                          title,
+                          help!,
+                          example: example,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
                 ),
               ],
             ),

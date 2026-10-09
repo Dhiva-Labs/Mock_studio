@@ -1,7 +1,7 @@
 name: mock_studio
 description: "Mock Studio by dhiva labs - a production-grade mock server for building, exposing and testing HTTP endpoints."
 publish_to: 'none'
-version: 1.1.0+2
+version: 1.2.0+3
 
 environment:
   sdk: ^3.12.2
@@ -40,6 +40,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
+  path_provider_platform_interface: ^2.1.2
+  plugin_platform_interface: ^2.1.8
   flutter_lints: ^6.0.0
 
 flutter:

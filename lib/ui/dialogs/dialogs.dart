@@ -9,6 +9,7 @@ import '../../services/openapi_import.dart';
 import '../../services/sample_data.dart';
 import '../../state/app_state.dart';
 import '../widgets/badges.dart';
+import '../widgets/help_tip.dart';
 import '../widgets/helpers.dart';
 
 Future<void> createProjectDialog(BuildContext context, AppState app) async {
@@ -19,7 +20,19 @@ Future<void> createProjectDialog(BuildContext context, AppState app) async {
   await showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('New project'),
+      // Scrolls above the on-screen keyboard on phones.
+      scrollable: true,
+      title: const Row(
+        children: [
+          Flexible(child: Text('New project')),
+          HelpTip(
+            'A project is one mock API: a set of endpoints served together on '
+            'one port and saved as one file.',
+            title: 'Project',
+            example: 'Payments API on port 8080',
+          ),
+        ],
+      ),
       content: SizedBox(
         width: 380,
         child: Form(
@@ -33,6 +46,12 @@ Future<void> createProjectDialog(BuildContext context, AppState app) async {
                 decoration: const InputDecoration(
                   labelText: 'Project name',
                   hintText: 'e.g. Payments API',
+                  suffixIcon: HelpTip(
+                    'A label for you, shown in the project list. Name it after '
+                    'the API you are mocking; you can rename it later.',
+                    title: 'Project name',
+                    example: 'Payments API',
+                  ),
                 ),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Enter a name' : null,
@@ -43,6 +62,13 @@ Future<void> createProjectDialog(BuildContext context, AppState app) async {
                 decoration: const InputDecoration(
                   labelText: 'Port',
                   helperText: 'The server will listen on this port',
+                  suffixIcon: HelpTip(
+                    'Your app reaches the mock at this number. Pick one from '
+                    '1024 to 65535 that nothing else uses. If another project '
+                    'has it, the next free number is used.',
+                    title: 'Port',
+                    example: '8080 → http://localhost:8080',
+                  ),
                 ),
                 keyboardType: TextInputType.number,
                 validator: (v) {
@@ -96,13 +122,22 @@ Future<void> renameProjectDialog(
   await showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: const Text('Rename project'),
       content: SizedBox(
         width: 360,
         child: TextField(
           controller: ctrl,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Project name'),
+          decoration: const InputDecoration(
+            labelText: 'Project name',
+            suffixIcon: HelpTip(
+              'Only the display name changes. The port, endpoints and saved '
+              'file stay the same.',
+              title: 'Project name',
+              example: 'Payments API v2',
+            ),
+          ),
         ),
       ),
       actions: [
@@ -133,6 +168,7 @@ Future<void> confirmDeleteProject(
   await showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: const Text('Delete project?'),
       content: Text(
         '"${project.name}" and all its ${project.endpoints.length} endpoints will be '
@@ -245,12 +281,16 @@ Future<void> newEndpointDialog(
                 children: [
                   const Icon(Icons.add_road_outlined),
                   const SizedBox(width: 10),
-                  Text(
-                    'Add an endpoint',
-                    style: Theme.of(ctx).textTheme.titleLarge,
+                  Expanded(
+                    child: Text(
+                      'Add an endpoint',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(ctx).textTheme.titleLarge,
+                    ),
                   ),
-                  const Spacer(),
                   IconButton(
+                    tooltip: 'Close',
                     onPressed: () => Navigator.pop(ctx),
                     icon: const Icon(Icons.close),
                   ),
@@ -259,26 +299,46 @@ Future<void> newEndpointDialog(
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                'Start from scratch, or pick a ready-made template.',
-                style: TextStyle(
-                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                ),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Start from scratch, or pick a ready-made template.',
+                      style: TextStyle(
+                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const HelpTip(
+                    'Templates are ordinary endpoints with useful settings '
+                    'already filled in, such as a delay or random errors. You '
+                    'can change everything after adding one.',
+                    title: 'Blank or template',
+                    example: 'Slow endpoint: a 2 s delay',
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  await app.addEndpoint(app.selectedProject!, Endpoint());
-                  onCreated?.call();
-                },
-                icon: const Icon(Icons.note_add_outlined),
-                label: const Text('Blank endpoint'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(46),
+              child: HelpHover(
+                'Adds a simple endpoint returning a JSON message, ready for '
+                'you to change the method, path and response.',
+                title: 'Blank endpoint',
+                example:
+                    'GET /hello → 200 {"message": "Hello from Mock Studio"}',
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await app.addEndpoint(app.selectedProject!, Endpoint());
+                    onCreated?.call();
+                  },
+                  icon: const Icon(Icons.note_add_outlined),
+                  label: const Text('Blank endpoint'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(46),
+                  ),
                 ),
               ),
             ),
@@ -332,7 +392,7 @@ void showAboutMockStudio(BuildContext context) {
   showAboutDialog(
     context: context,
     applicationName: 'Mock Studio',
-    applicationVersion: '1.1.0 · by dhiva labs',
+    applicationVersion: '1.2.0 · by dhiva labs',
     applicationIcon: Container(
       width: 44,
       height: 44,

@@ -4,7 +4,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../services/tunnel_service.dart';
 import '../../state/app_state.dart';
+import '../widgets/help_tip.dart';
 import '../widgets/helpers.dart';
+import '../widgets/responsive.dart';
+import '../../theme/app_theme.dart';
 
 /// The "Share & Expose" tab: reach the mock from the LAN (phones/emulators)
 /// and, optionally, the public internet through a tunnel.
@@ -13,30 +16,41 @@ class ShareView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
+    // Only the server state, port and addresses; logs don't rebuild this.
+    final (_, port, running, lan) = context
+        .select<AppState, (String?, int, bool, String)>((a) {
+          final p = a.selectedProject!;
+          return (p.id, p.port, a.isRunning(p.id), a.lanAddresses.join(','));
+        });
+    final app = context.read<AppState>();
     final project = app.selectedProject!;
-    final running = app.isRunning(project.id);
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isPhone(context) ? 12 : 20),
       children: [
-        if (!running)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: HintCard(
-              'Your server is stopped. Start it first — then these URLs will be reachable.',
-              icon: Icons.info_outline,
-            ),
-          ),
-        _LocalSection(port: project.port, running: running),
+        // Always one slot (empty while running) so the sections below keep
+        // their place in the list: otherwise starting the server rebuilt
+        // them from scratch and the tunnel check showed "Checking…" again.
+        running
+            ? const SizedBox.shrink()
+            : const Padding(
+                padding: EdgeInsets.only(bottom: 16),
+                child: HintCard(
+                  'Your server is stopped. Start it first — then these URLs '
+                  'will be reachable.',
+                  icon: Icons.info_outline,
+                ),
+              ),
+        _LocalSection(port: port, running: running),
+        _LocalSection(port: port, running: running),
         const SizedBox(height: 20),
         _LanSection(
-          addresses: app.lanAddresses,
+          addresses: lan.isEmpty ? const [] : lan.split(','),
           port: project.port,
           running: running,
         ),
         const SizedBox(height: 20),
-        _TunnelSection(running: running, port: project.port),
+        _TunnelSection(running: running, port: port),
       ],
     );
   }
@@ -46,12 +60,16 @@ class _SectionShell extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final String help;
+  final String? example;
   final Widget child;
   const _SectionShell({
     required this.icon,
     required this.title,
     required this.subtitle,
+    required this.help,
     required this.child,
+    this.example,
   });
 
   @override
@@ -59,7 +77,7 @@ class _SectionShell extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.all(isPhone(context) ? 14 : 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -74,24 +92,28 @@ class _SectionShell extends StatelessWidget {
                   child: Icon(icon, size: 18, color: scheme.primary),
                 ),
                 const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LabelWithHelp(
+                        title,
+                        help,
+                        example: example,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
                       ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: scheme.onSurfaceVariant,
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -112,32 +134,47 @@ class _UrlChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: enabled
-            ? () => copyToClipboard(context, url, label: 'Copied $url')
-            : null,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: scheme.outlineVariant),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: SelectableText(
-                  url,
-                  maxLines: 1,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+    return HelpHover(
+      enabled
+          ? 'Click to copy this address, then paste it into your app or '
+                'browser.'
+          : 'Start the server first; until then nothing answers here.',
+      title: enabled ? 'Copy URL' : 'Server stopped',
+      example: enabled ? '$url/users' : null,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: enabled
+              ? () => copyToClipboard(context, url, label: 'Copied $url')
+              : null,
+          child: Container(
+            // 44 px or taller on phones.
+            padding: EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: isPhone(context) ? 13 : 10,
+            ),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    url,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Icon(Icons.copy, size: 15, color: scheme.onSurfaceVariant),
-            ],
+                const SizedBox(width: 8),
+                Icon(Icons.copy, size: 15, color: scheme.onSurfaceVariant),
+              ],
+            ),
           ),
         ),
       ),
@@ -156,6 +193,11 @@ class _LocalSection extends StatelessWidget {
       icon: Icons.computer_outlined,
       title: 'This computer',
       subtitle: 'For apps running on the same machine',
+      help:
+          'Use this address from a browser, curl or an app on this computer. '
+          'localhost always means the device making the request, so a phone '
+          'needs a LAN address instead.',
+      example: 'curl http://localhost:$port/users',
       child: _UrlChip(url: 'http://localhost:$port', enabled: running),
     );
   }
@@ -181,6 +223,11 @@ class _LanSection extends StatelessWidget {
       icon: Icons.wifi,
       title: 'Local network (LAN)',
       subtitle: 'For phones, emulators & teammates on the same Wi-Fi',
+      help:
+          'Devices on the same Wi-Fi or wired network can call your mock at '
+          'these addresses. If a phone can\'t connect, check that your '
+          'firewall allows port $port.',
+      example: 'http://192.168.1.20:$port/users',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -190,31 +237,39 @@ class _LanSection extends StatelessWidget {
               style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
             )
           else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final addr in addresses) ...[
-                        _UrlChip(url: 'http://$addr:$port', enabled: running),
-                        const SizedBox(height: 8),
-                      ],
-                      const SizedBox(height: 4),
-                      Text(
-                        'Android emulator? Use http://10.0.2.2:$port to reach this machine.',
+            LayoutBuilder(
+              builder: (context, box) {
+                final urls = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final addr in addresses) ...[
+                      _UrlChip(url: 'http://$addr:$port', enabled: running),
+                      const SizedBox(height: 8),
+                    ],
+                    const SizedBox(height: 4),
+                    HelpHover(
+                      '10.0.2.2 is the special address an Android emulator '
+                      'uses to reach the computer it runs on.',
+                      title: 'Android emulator',
+                      example: 'http://10.0.2.2:$port/users',
+                      child: Text(
+                        'Android emulator? Use http://10.0.2.2:$port to '
+                        'reach this machine.',
                         style: TextStyle(
                           fontSize: 11.5,
                           color: scheme.onSurfaceVariant,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                if (primary != null && running) ...[
-                  const SizedBox(width: 20),
-                  Column(
+                    ),
+                  ],
+                );
+                if (primary == null || !running) return urls;
+                final qr = HelpHover(
+                  'Scan with your phone\'s camera to open the first LAN '
+                  'address. The phone must be on the same network.',
+                  title: 'QR code',
+                  example: primary,
+                  child: Column(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(10),
@@ -239,8 +294,27 @@ class _LanSection extends StatelessWidget {
                       ),
                     ],
                   ),
-                ],
-              ],
+                );
+                // Narrow: the QR code goes under the addresses.
+                if (box.maxWidth < 440) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      urls,
+                      const SizedBox(height: 12),
+                      Center(child: qr),
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: urls),
+                    const SizedBox(width: 20),
+                    qr,
+                  ],
+                );
+              },
             ),
         ],
       ),
@@ -248,14 +322,30 @@ class _LanSection extends StatelessWidget {
   }
 }
 
-class _TunnelSection extends StatelessWidget {
+class _TunnelSection extends StatefulWidget {
   final bool running;
   final int port;
   const _TunnelSection({required this.running, required this.port});
 
   @override
+  State<_TunnelSection> createState() => _TunnelSectionState();
+}
+
+class _TunnelSectionState extends State<_TunnelSection> {
+  @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
+    final running = widget.running;
+    final port = widget.port;
+    final app = context.read<AppState>();
+    // Rebuilt by tunnel changes only, not by request logs.
+    context.select<AppState, (TunnelStatus, TunnelProvider, String?, String?)>(
+      (a) => (
+        a.tunnel.status,
+        a.tunnel.provider,
+        a.tunnel.publicUrl,
+        a.tunnel.lastError,
+      ),
+    );
     final tunnel = app.tunnel;
     final scheme = Theme.of(context).colorScheme;
 
@@ -263,32 +353,57 @@ class _TunnelSection extends StatelessWidget {
       icon: Icons.public,
       title: 'Public internet (tunnel)',
       subtitle: 'Get a public https URL — great for webhooks (Stripe, GitHub…)',
+      help:
+          'A tunnel gives your mock a temporary public https address. Anyone '
+          'who has the URL can call your mock while the tunnel runs, so keep '
+          'real secrets out of your responses.',
+      example: 'https://calm-river-12.trycloudflare.com/webhooks',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // Provider choice and status; the status wraps under on phones.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
             children: [
               SegmentedButton<TunnelProvider>(
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: TunnelProvider.cloudflared,
-                    label: Text('cloudflared'),
-                    icon: Icon(Icons.cloud_outlined, size: 16),
+                    label: _providerHover(
+                      TunnelProvider.cloudflared,
+                      const Text('cloudflared'),
+                    ),
+                    icon: _providerHover(
+                      TunnelProvider.cloudflared,
+                      const Icon(Icons.cloud_outlined, size: 16),
+                    ),
                   ),
                   ButtonSegment(
                     value: TunnelProvider.ngrok,
-                    label: Text('ngrok'),
-                    icon: Icon(Icons.hub_outlined, size: 16),
+                    label: _providerHover(
+                      TunnelProvider.ngrok,
+                      const Text('ngrok'),
+                    ),
+                    icon: _providerHover(
+                      TunnelProvider.ngrok,
+                      const Icon(Icons.hub_outlined, size: 16),
+                    ),
                   ),
                 ],
                 selected: {tunnel.provider},
+                // The service doesn't notify for this, so rebuild here (the
+                // choice used to show only after the next app change).
                 onSelectionChanged: tunnel.status == TunnelStatus.running
                     ? null
-                    : (s) => tunnel.provider = s.first,
+                    : (s) => setState(() => tunnel.provider = s.first),
               ),
-              const Spacer(),
-              _tunnelStatusPill(context, tunnel.status),
+              _statusHover(
+                tunnel.status,
+                _tunnelStatusPill(context, tunnel.status),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -340,26 +455,11 @@ class _TunnelSection extends StatelessWidget {
                   ),
                 ),
               ),
-            FutureBuilder<bool>(
-              future: TunnelService.isAvailable(tunnel.provider),
-              builder: (context, snap) {
-                final available = snap.data ?? false;
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const SizedBox(height: 20, child: Text('Checking…'));
-                }
-                if (!available) {
-                  return _NotInstalledHint(provider: tunnel.provider);
-                }
-                return FilledButton.icon(
-                  onPressed: running
-                      ? () => tunnel.start(tunnel.provider, port)
-                      : null,
-                  icon: const Icon(Icons.rocket_launch_outlined, size: 18),
-                  label: Text(
-                    running ? 'Start public tunnel' : 'Start the server first',
-                  ),
-                );
-              },
+            _TunnelStart(
+              provider: tunnel.provider,
+              running: running,
+              port: port,
+              onStart: () => tunnel.start(tunnel.provider, port),
             ),
           ],
         ],
@@ -367,11 +467,51 @@ class _TunnelSection extends StatelessWidget {
     );
   }
 
+  Widget _providerHover(TunnelProvider provider, Widget child) =>
+      provider == TunnelProvider.cloudflared
+      ? HelpHover(
+          'Cloudflare\'s free quick tunnel. No account needed; you get a new '
+          'random address each time. Must be installed on this computer. '
+          'Stop the tunnel to switch.',
+          title: 'cloudflared',
+          example: 'https://calm-river-12.trycloudflare.com',
+          child: child,
+        )
+      : HelpHover(
+          'Needs an ngrok account and its authtoken set once in a terminal. '
+          'Must be installed on this computer. Stop the tunnel to switch.',
+          title: 'ngrok',
+          example: 'ngrok config add-authtoken <token>',
+          child: child,
+        );
+
+  Widget _statusHover(TunnelStatus status, Widget child) {
+    final (title, message) = switch (status) {
+      TunnelStatus.running => (
+        'Live',
+        'The public URL works. Anyone who has it can reach your mock.',
+      ),
+      TunnelStatus.starting => (
+        'Starting',
+        'Waiting for the tunnel program to report a public address.',
+      ),
+      TunnelStatus.error => (
+        'Error',
+        'The tunnel stopped or never started. The message below says why.',
+      ),
+      TunnelStatus.stopped => (
+        'Offline',
+        'No tunnel is running, so the mock is not reachable from the internet.',
+      ),
+    };
+    return HelpHover(message, title: title, child: child);
+  }
+
   Widget _tunnelStatusPill(BuildContext context, TunnelStatus status) {
     final scheme = Theme.of(context).colorScheme;
     final (color, label) = switch (status) {
-      TunnelStatus.running => (const Color(0xFF16A34A), 'Live'),
-      TunnelStatus.starting => (const Color(0xFFD97706), 'Starting'),
+      TunnelStatus.running => (AppTheme.success, 'Live'),
+      TunnelStatus.starting => (AppTheme.warning, 'Starting'),
       TunnelStatus.error => (scheme.error, 'Error'),
       TunnelStatus.stopped => (scheme.outline, 'Offline'),
     };
@@ -392,6 +532,67 @@ class _TunnelSection extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "Start public tunnel", or how to install the tool when it's missing.
+///
+/// Looking for the tool runs `which`; the answer is kept until the provider
+/// changes. Asking again on every rebuild showed "Checking…" for a moment
+/// each time anything in the app changed (every logged request), so the
+/// button flickered and a process was started each time.
+class _TunnelStart extends StatefulWidget {
+  const _TunnelStart({
+    required this.provider,
+    required this.running,
+    required this.port,
+    required this.onStart,
+  });
+
+  final TunnelProvider provider;
+  final bool running;
+  final int port;
+  final VoidCallback onStart;
+
+  @override
+  State<_TunnelStart> createState() => _TunnelStartState();
+}
+
+class _TunnelStartState extends State<_TunnelStart> {
+  late Future<bool> _available = TunnelService.isAvailable(widget.provider);
+
+  @override
+  void didUpdateWidget(_TunnelStart old) {
+    super.didUpdateWidget(old);
+    if (old.provider != widget.provider) {
+      _available = TunnelService.isAvailable(widget.provider);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<bool>(
+    future: _available,
+    builder: (context, snap) {
+      if (snap.connectionState != ConnectionState.done) {
+        return const SizedBox(height: 20, child: Text('Checking…'));
+      }
+      if (!(snap.data ?? false)) {
+        return _NotInstalledHint(provider: widget.provider);
+      }
+      return HelpHover(
+        'Runs the tunnel program on this computer and forwards its public '
+        'URL to port ${widget.port}. One tunnel runs at a time, and stopping '
+        'this server also stops it.',
+        title: 'Start public tunnel',
+        child: FilledButton.icon(
+          onPressed: widget.running ? widget.onStart : null,
+          icon: const Icon(Icons.rocket_launch_outlined, size: 18),
+          label: Text(
+            widget.running ? 'Start public tunnel' : 'Start the server first',
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _NotInstalledHint extends StatelessWidget {

@@ -5,6 +5,39 @@ All notable changes to Mock Studio are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-10-10
+
+### Added
+
+- **Postman import** — turn a Postman collection (v2.1, v2.0, v1, single
+  requests or folders; files or pasted JSON) into mock endpoints. Each saved
+  example becomes a response; several examples become conditional rules
+  (query-parameter rules where the example's request differs, otherwise the
+  `x-mock-response-name` header, like Postman's own mock servers). Auth
+  requirements, folders and `{{variables}}` carry over; a preview lists
+  anything that needs attention. Import into a new or an existing project.
+- **Folders** in the endpoint list, with Move to folder, Rename and Ungroup.
+- **Hover help** on every field, button, badge and section: a card with a
+  title, a plain explanation and an example. Can be turned off in Settings.
+- **Phone layout** — bottom navigation, list-then-editor endpoints, full-screen
+  request details and stacked forms on small screens.
+- Teal light and dark themes (following the system by default) and a
+  Graphite and orange theme, shared with ApiWorkbench.
+
+### Changed
+
+- Redesigned interface: icon rail navigation, resizable side panel,
+  breadcrumbs and a clickable server status pill in the header.
+- New braces-and-server logo on every platform.
+- Method colours follow the ApiWorkbench / Postman convention (GET green,
+  POST amber, PUT blue).
+
+### Fixed
+
+- Duplicating a project kept the original's id, so the copy shared its
+  server, logs and file and could overwrite the original.
+- The conditions row and Live request tags overflowed in narrow layouts.
+
 ## [1.1.0] - 2026-10-06
 
 ### Added
@@ -67,5 +100,6 @@ server you drive from a desktop app.
 - **One UI-inspired** desktop interface with light/dark themes and a beginner
   Guide mode.
 
+[1.2.0]: https://github.com/Dhiva-Labs/Mock_studio/releases/tag/v1.2.0
 [1.1.0]: https://github.com/Dhiva-Labs/Mock_studio/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Dhiva-Labs/Mock_studio/releases/tag/v1.0.0

@@ -1,3 +1,15 @@
+mockstudio (1.2.0) noble; urgency=medium
+
+  * Postman import: requests become mock endpoints and saved examples
+    become responses, into a new or an existing project.
+  * Redesigned interface: icon rail, folder tree, breadcrumbs, server
+    status pill, Teal light/dark and Graphite themes, and a new logo.
+  * Hover help on every field, button and badge (can be turned off), and
+    a phone layout with bottom navigation.
+  * Fix: duplicating a project kept the original's id and file.
+
+ -- Dhivakar R <dhivakar1010@gmail.com>  Sat, 10 Oct 2026 04:30:00 +0530
+
 mockstudio (1.1.0) noble; urgency=medium
 
   * Flows tab: multi-step, concurrent traffic scenarios with live

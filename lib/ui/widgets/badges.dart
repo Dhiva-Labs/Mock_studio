@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/enums.dart';
 import '../../theme/app_theme.dart';
+import 'help_tip.dart';
 
 /// A coloured pill showing an HTTP method.
 class MethodBadge extends StatelessWidget {
@@ -18,24 +19,29 @@ class MethodBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = AppTheme.methodColor(method);
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 6 : 8,
-        vertical: compact ? 2 : 3,
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Text(
-        method.label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: fontSize,
-          letterSpacing: 0.3,
-          fontFeatures: const [FontFeature.tabularFigures()],
+    final help = httpMethodHelp(method.label);
+    return HelpHover(
+      help.message,
+      title: help.title,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 6 : 8,
+          vertical: compact ? 2 : 3,
+        ),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Text(
+          method.label,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w700,
+            fontSize: fontSize,
+            letterSpacing: 0.3,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
       ),
     );
@@ -50,19 +56,24 @@ class MethodBadgeString extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = AppTheme.methodColorFromString(method);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Text(
-        method.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: 11,
+    final help = httpMethodHelp(method);
+    return HelpHover(
+      help.message,
+      title: help.title,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Text(
+          method.toUpperCase(),
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+          ),
         ),
       ),
     );
@@ -78,20 +89,25 @@ class StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = AppTheme.statusColor(code);
     final label = code == 0 ? 'RST' : code.toString();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: 11,
-          fontFeatures: const [FontFeature.tabularFigures()],
+    final help = httpStatusHelp(code);
+    return HelpHover(
+      help.message,
+      title: help.title,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
       ),
     );
@@ -106,7 +122,7 @@ class RunningDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = running
-        ? const Color(0xFF16A34A)
+        ? AppTheme.success
         : Theme.of(context).colorScheme.outline;
     return Container(
       width: 9,
