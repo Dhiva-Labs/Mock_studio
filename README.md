@@ -93,3 +93,8 @@ flutter test integration_test/screenshots_test.dart -d linux    # regenerate scr
 Covers route matching, templating, response resolution, the flow runner
 (chaining, parallel mode, stop, isolate), proxy/fault regressions, and live
 end-to-end server integration tests.
+
+## Privacy
+
+No accounts, analytics or telemetry; the network traffic is the mock server you
+start and the requests you send. See [PRIVACY.md](PRIVACY.md).
