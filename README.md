@@ -60,6 +60,12 @@ flutter pub get
 flutter run -d linux      # or build: flutter build linux
 ```
 
+On Windows, `flutter build windows --release`, then `dart run msix:create --store`
+for the Microsoft Store package (.msix). Projects are saved in
+`Documents\MockStudio\projects`. The first time a server starts, Windows
+Firewall asks whether to allow Mock Studio on your networks; allow private
+networks if phones or teammates on your LAN should reach it.
+
 On first launch a sample project ("My First Mock API") is created so you can
 explore immediately. Toggle **Guide** on the left rail for extra hints, and
 point at any field for an explanation. Teal (light/dark) and Graphite themes
@@ -68,7 +74,8 @@ are in **Settings**; phones get a bottom-navigation layout.
 ## Public tunnels
 
 - **cloudflared** quick tunnels need no account. Install `cloudflared` and it
-  appears in *Share & Expose → Public internet*.
+  appears in *Share & Expose → Public internet*. On Windows:
+  `winget install --id Cloudflare.cloudflared`, then restart Mock Studio.
 - **ngrok** needs a one-time `ngrok config add-authtoken <token>`.
 
 ## Tech

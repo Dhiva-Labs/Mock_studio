@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -41,7 +43,6 @@ class ShareView extends StatelessWidget {
                   icon: Icons.info_outline,
                 ),
               ),
-        _LocalSection(port: port, running: running),
         _LocalSection(port: port, running: running),
         const SizedBox(height: 20),
         _LanSection(
@@ -604,7 +605,17 @@ class _NotInstalledHint extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final isCf = provider == TunnelProvider.cloudflared;
     final name = isCf ? 'cloudflared' : 'ngrok';
-    final install = isCf
+    // A program installed while Mock Studio runs is not on its PATH yet,
+    // so Windows users have to restart the app.
+    final install = Platform.isWindows
+        ? (isCf
+              ? 'Install cloudflared, then restart Mock Studio.\n'
+                    '• winget install --id Cloudflare.cloudflared, or\n'
+                    '• download cloudflared-windows-amd64.exe from Cloudflare\'s GitHub releases, rename it cloudflared.exe and put it on your PATH'
+              : 'Install ngrok, set your authtoken, then restart Mock Studio:\n'
+                    '• Download from ngrok.com/download\n'
+                    '• ngrok config add-authtoken <YOUR_TOKEN>')
+        : isCf
         ? 'Install cloudflared, then reopen this tab.\n'
               '• Debian/Ubuntu: download the .deb from Cloudflare, or\n'
               '• curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared'

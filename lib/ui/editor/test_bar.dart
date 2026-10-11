@@ -300,7 +300,18 @@ class _TestBarState extends State<TestBar> {
 
   Future<void> _openInBrowser() async {
     try {
-      await Process.run('xdg-open', [_fullUrl]);
+      if (Platform.isWindows) {
+        // No shell involved, so & and ? in the query string reach the
+        // browser untouched (cmd /c start would split the URL at &).
+        await Process.run('rundll32', [
+          'url.dll,FileProtocolHandler',
+          _fullUrl,
+        ]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [_fullUrl]);
+      } else {
+        await Process.run('xdg-open', [_fullUrl]);
+      }
     } catch (_) {
       if (mounted) copyToClipboard(context, _fullUrl, label: 'URL copied');
     }

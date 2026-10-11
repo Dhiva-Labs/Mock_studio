@@ -45,8 +45,25 @@ dev_dependencies:
   path_provider_platform_interface: ^2.1.2
   plugin_platform_interface: ^2.1.8
   flutter_lints: ^6.0.0
+  msix: ^3.18.0
 
 flutter:
   uses-material-design: true
   assets:
     - assets/
+
+# Microsoft Store package (`dart run msix:create --store`). The identity values
+# come from Partner Center > Product identity; the Store signs the package.
+msix_config:
+  display_name: Mock Studio
+  publisher_display_name: Dhiva-Labs
+  identity_name: Dhiva-Labs.MockStudio
+  publisher: CN=0F69015A-AA5B-431D-970A-165099309E53
+  msix_version: 1.2.0.0
+  logo_path: assets/icon_512.png
+  output_name: MockStudio
+  languages: en-us
+  # Serves mock APIs to this PC and the LAN (0.0.0.0:<port>), and calls
+  # endpoints from the test bar and Flows. runFullTrust is always added.
+  capabilities: internetClient,internetClientServer,privateNetworkClientServer
+  store: true

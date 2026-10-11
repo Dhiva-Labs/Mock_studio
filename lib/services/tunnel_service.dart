@@ -31,12 +31,17 @@ class TunnelService {
   static final _cfUrl = RegExp(r'https://[a-z0-9-]+\.trycloudflare\.com');
 
   /// Checks whether the given provider's binary is on PATH.
+  ///
+  /// Windows has no `which`; `where` is its equivalent. Without it the check
+  /// threw, and the tunnel was reported missing even when installed.
   static Future<bool> isAvailable(TunnelProvider provider) async {
     final bin = provider == TunnelProvider.cloudflared
         ? 'cloudflared'
         : 'ngrok';
     try {
-      final r = await Process.run('which', [bin]);
+      final r = await Process.run(Platform.isWindows ? 'where' : 'which', [
+        bin,
+      ]);
       return r.exitCode == 0;
     } catch (_) {
       return false;
