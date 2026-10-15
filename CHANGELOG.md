@@ -5,6 +5,40 @@ All notable changes to Mock Studio are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-10-16
+
+### Added
+
+- Linux arm64 and Windows arm64 builds, next to the x64 ones. CI builds,
+  tests and starts each package on a native runner of its architecture, and
+  a published release carries `mockstudio_<version>_arm64.deb` (with its
+  `.sha256`), `MockStudio-<version>-linux-arm64.tar.gz` and
+  `MockStudio-<version>-windows-arm64.zip`. The snap and the Microsoft Store
+  package build for arm64 too.
+- Windows x64 zip (`MockStudio-<version>-windows-x64.zip`), Linux tarballs for
+  x64 and arm64, and Microsoft Store packaging for Windows (`msix_config` in
+  `pubspec.yaml`).
+- A privacy policy (`PRIVACY.md`): Mock Studio reports nothing to Dhiva Labs,
+  and the network use it makes is the use you start.
+
+### Changed
+
+- The Windows executable is labelled Mock Studio / Dhiva Labs in its version
+  info, so Windows settings live under `%APPDATA%\Dhiva Labs\Mock Studio`.
+- Locked `jni` to 1.0.3, which compiles on Linux arm64.
+
+### Fixed
+
+- Windows: public tunnels were always reported as not installed, because the
+  check ran `which`, which Windows does not have. It now uses `where`, and the
+  hint gives Windows install instructions and says to restart Mock Studio.
+- The test bar's Open in browser used `xdg-open` on every platform, so on
+  Windows and macOS it only copied the URL. It now opens the default browser
+  (`rundll32 url.dll,FileProtocolHandler` on Windows, `open` on macOS).
+- Share & Expose showed the "This computer" card twice.
+- On Linux arm64 the cloudflared install hint pointed at the amd64 download;
+  it now names the arm64 one.
+
 ## [1.2.0] - 2026-10-10
 
 ### Added
@@ -100,6 +134,7 @@ server you drive from a desktop app.
 - **One UI-inspired** desktop interface with light/dark themes and a beginner
   Guide mode.
 
+[1.2.1]: https://github.com/Dhiva-Labs/Mock_studio/releases/tag/v1.2.1
 [1.2.0]: https://github.com/Dhiva-Labs/Mock_studio/releases/tag/v1.2.0
 [1.1.0]: https://github.com/Dhiva-Labs/Mock_studio/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Dhiva-Labs/Mock_studio/releases/tag/v1.0.0

@@ -1,7 +1,7 @@
 name: mock_studio
 description: "Mock Studio by dhiva labs - a production-grade mock server for building, exposing and testing HTTP endpoints."
 publish_to: 'none'
-version: 1.2.0+3
+version: 1.2.1+4
 
 environment:
   sdk: ^3.12.2
@@ -59,7 +59,7 @@ msix_config:
   publisher_display_name: Dhiva-Labs
   identity_name: Dhiva-Labs.MockStudio
   publisher: CN=0F69015A-AA5B-431D-970A-165099309E53
-  msix_version: 1.2.0.0
+  msix_version: 1.2.1.0
   logo_path: assets/icon_512.png
   output_name: MockStudio
   languages: en-us
