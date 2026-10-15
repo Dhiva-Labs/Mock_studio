@@ -605,6 +605,8 @@ class _NotInstalledHint extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final isCf = provider == TunnelProvider.cloudflared;
     final name = isCf ? 'cloudflared' : 'ngrok';
+    // Dart's version string ends in the platform, e.g. "linux_arm64".
+    final cfArch = Platform.version.contains('arm64') ? 'arm64' : 'amd64';
     // A program installed while Mock Studio runs is not on its PATH yet,
     // so Windows users have to restart the app.
     final install = Platform.isWindows
@@ -618,7 +620,7 @@ class _NotInstalledHint extends StatelessWidget {
         : isCf
         ? 'Install cloudflared, then reopen this tab.\n'
               '• Debian/Ubuntu: download the .deb from Cloudflare, or\n'
-              '• curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared'
+              '• curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$cfArch -o cloudflared'
         : 'Install ngrok and set your authtoken:\n'
               '• Download from ngrok.com/download\n'
               '• ngrok config add-authtoken <YOUR_TOKEN>';

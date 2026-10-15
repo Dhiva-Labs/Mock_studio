@@ -10,6 +10,10 @@
 # exist in linux/packaging/debian/changelog. Launchpad rejects re-uploads of an
 # already-published version.
 #
+# The package holds the bundle built on this machine, so it targets this
+# machine's architecture (amd64 or arm64): the staged debian/control gets the
+# matching Architecture line. (A PPA only builds arm64 when it is enabled there.)
+#
 # Regression guard: debian/source/options overrides dpkg-source's default
 # ignore list so the bundled *.so engine libraries ship in the source tarball.
 # Without it the app installs but crashes with
@@ -20,12 +24,19 @@ KEY=0D3EFC9C8CE20ADE3CE809AD3D8D857AAF4D50E6
 PPA=ppa:dhiva-labs/apps
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="$REPO/linux/packaging"
-BUNDLE="$REPO/build/linux/x64/release/bundle"
 OUT="$REPO/dist/ppa"
 
 BOLD=$'\e[1m'; GRN=$'\e[32m'; RED=$'\e[31m'; RST=$'\e[0m'
 say(){ echo "${BOLD}${GRN}>>> $*${RST}"; }
 die(){ echo "${BOLD}${RED}XXX $*${RST}" >&2; exit 1; }
+
+DEB_ARCH="$(dpkg --print-architecture)"
+case "$DEB_ARCH" in
+  amd64) FLUTTER_ARCH=x64 ;;
+  arm64) FLUTTER_ARCH=arm64 ;;
+  *) die "unsupported architecture '$DEB_ARCH' (amd64 or arm64)" ;;
+esac
+BUNDLE="$REPO/build/linux/$FLUTTER_ARCH/release/bundle"
 
 SKIP_BUILD=0; UPLOAD=0
 for a in "$@"; do case "$a" in
@@ -56,6 +67,7 @@ rm -rf "$OUT"; mkdir -p \
   "$SRC/usr/share/icons/hicolor/512x512/apps" \
   "$SRC/usr/share/icons/hicolor/256x256/apps"
 cp -a "$PKG/debian" "$SRC/debian"
+sed -i "s/^Architecture: .*/Architecture: $DEB_ARCH/" "$SRC/debian/control"
 cp -a "$BUNDLE/." "$SRC/usr/lib/mockstudio/"
 cp "$PKG/mockstudio.desktop" "$SRC/usr/share/applications/"
 cp "$PKG/icons/mockstudio-512.png" "$SRC/usr/share/icons/hicolor/512x512/apps/mockstudio.png"
