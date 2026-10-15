@@ -65,7 +65,9 @@ Download from the [releases page](https://github.com/Dhiva-Labs/Mock_studio/rele
 |---|---|
 | Linux x64 (Debian, Ubuntu) | `mockstudio_<version>_amd64.deb` |
 | Linux arm64 (Debian, Ubuntu) | `mockstudio_<version>_arm64.deb` |
+| Linux x64 (other distributions) | `MockStudio-<version>-linux-x64.tar.gz` |
 | Linux arm64 (other distributions) | `MockStudio-<version>-linux-arm64.tar.gz` |
+| Windows x64 | `MockStudio-<version>-windows-x64.zip` |
 | Windows arm64 | `MockStudio-<version>-windows-arm64.zip` |
 
 ```sh
@@ -75,14 +77,13 @@ tar -xzf MockStudio-<version>-linux-arm64.tar.gz && ./MockStudio-<version>-linux
 ```
 
 The tarball needs GTK 3 (`libgtk-3-0`). On Windows, unzip and run
-`mock_studio.exe`. The Snap Store listing (`sudo snap install mockstudio`) is
-the amd64 build.
+`mock_studio.exe`. Snap: `sudo snap install mockstudio` (amd64 and arm64).
 
 Every push to `main` builds, tests and packages Mock Studio for Linux and
 Windows on x64 and arm64 (the **Desktop builds** workflow). Its run page has
-the Windows x64 zip, the Microsoft Store packages (`.msix`) and the snaps for
-both architectures as artifacts. The arm64 packages above are attached to a
-release when it is published.
+the Microsoft Store packages (`.msix`) and the snaps for both architectures as
+artifacts. The Linux and Windows packages above are attached to a release when
+it is published; a file that was attached by hand is left as it is.
 
 ## Getting started
 

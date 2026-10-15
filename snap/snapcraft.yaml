@@ -12,7 +12,7 @@
 name: mockstudio
 title: Mock Studio
 base: core22
-version: '1.2.0'
+version: '1.2.1'
 summary: Production mock server - design endpoints, share them on LAN or online
 description: |
   Mock Studio lets you design HTTP endpoints visually and serve them from a
