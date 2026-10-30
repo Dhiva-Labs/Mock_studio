@@ -392,7 +392,7 @@ void showAboutMockStudio(BuildContext context) {
   showAboutDialog(
     context: context,
     applicationName: 'Mock Studio',
-    applicationVersion: '1.2.0 · by dhiva labs',
+    applicationVersion: '1.2.1 · by dhiva labs',
     applicationIcon: Container(
       width: 44,
       height: 44,
