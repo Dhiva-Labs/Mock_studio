@@ -3,6 +3,7 @@
 [![ARM64 builds](https://github.com/Dhiva-Labs/Mock_studio/actions/workflows/desktop.yml/badge.svg?branch=main)](https://github.com/Dhiva-Labs/Mock_studio/actions/workflows/desktop.yml)
 ![Linux x64 | arm64](https://img.shields.io/badge/Linux-x64%20%7C%20arm64-informational?logo=linux&logoColor=white)
 ![Windows x64 | arm64](https://img.shields.io/badge/Windows-x64%20%7C%20arm64-informational?logo=windows&logoColor=white)
+![Linux: deb | rpm | Arch | AppImage | Flatpak | Snap](https://img.shields.io/badge/Linux-deb%20%7C%20rpm%20%7C%20Arch%20%7C%20AppImage%20%7C%20Flatpak%20%7C%20Snap-informational?logo=linux&logoColor=white)
 
 *by dhiva labs*
 
@@ -65,6 +66,10 @@ Download from the [releases page](https://github.com/Dhiva-Labs/Mock_studio/rele
 |---|---|
 | Linux x64 (Debian, Ubuntu) | `mockstudio_<version>_amd64.deb` |
 | Linux arm64 (Debian, Ubuntu) | `mockstudio_<version>_arm64.deb` |
+| Linux (Fedora, RHEL, openSUSE) | `mockstudio-<version>-1.x86_64.rpm`, `mockstudio-<version>-1.aarch64.rpm` |
+| Linux (Arch, Manjaro, EndeavourOS) | `mockstudio-<version>-1-x86_64.pkg.tar.zst`, `mockstudio-<version>-1-aarch64.pkg.tar.zst` |
+| Linux (any distribution) | `MockStudio-<version>-x86_64.AppImage`, `MockStudio-<version>-aarch64.AppImage` |
+| Linux (Flatpak) | `mockstudio-<version>-x86_64.flatpak`, `mockstudio-<version>-aarch64.flatpak` |
 | Linux x64 (other distributions) | `MockStudio-<version>-linux-x64.tar.gz` |
 | Linux arm64 (other distributions) | `MockStudio-<version>-linux-arm64.tar.gz` |
 | Windows x64 | `MockStudio-<version>-windows-x64.zip` |
@@ -78,6 +83,37 @@ tar -xzf MockStudio-<version>-linux-arm64.tar.gz && ./MockStudio-<version>-linux
 
 The tarball needs GTK 3 (`libgtk-3-0`). On Windows, unzip and run
 `mock_studio.exe`. Snap: `sudo snap install mockstudio` (amd64 and arm64).
+
+### Fedora, RHEL, openSUSE, Arch, AppImage and Flatpak
+
+These are attached to releases from 1.2.1 on, for x86_64 and aarch64. They
+hold the same build as the .deb (the CI repackages it and then installs and
+starts every package on Fedora, openSUSE Tumbleweed and Arch Linux). The
+build machine is Ubuntu 24.04, so the .rpm, Arch package and AppImage need
+glibc 2.34 or newer and a current GTK 3: Fedora 40+, RHEL/Rocky/Alma 10,
+openSUSE Tumbleweed and Leap 16, current Arch.
+
+```sh
+sudo dnf install ./mockstudio-<version>-1.x86_64.rpm                          # Fedora, RHEL
+sudo zypper install --allow-unsigned-rpm ./mockstudio-<version>-1.x86_64.rpm  # openSUSE
+sudo pacman -U ./mockstudio-<version>-1-x86_64.pkg.tar.zst                    # Arch
+chmod +x MockStudio-<version>-x86_64.AppImage && ./MockStudio-<version>-x86_64.AppImage
+flatpak install --user ./mockstudio-<version>-x86_64.flatpak                 # then: flatpak run com.dhivalabs.mock_studio
+```
+
+- The .rpm and Arch packages are not signed, hence zypper's
+  `--allow-unsigned-rpm`. They pull in `xdg-user-dirs` (the projects folder)
+  and `which` (the tunnel tools' lookup); install `cloudflared` yourself for
+  public tunnels, as with the .deb.
+- Arch: an AUR recipe for `mockstudio-bin` (PKGBUILD and .SRCINFO) is
+  attached to each release as `mockstudio-bin-<version>-aur.tar.gz`.
+- The AppImage uses the system's GTK 3 and `xdg-user-dir`, as the tarball
+  does.
+- The Flatpak needs the Flathub remote for the GNOME runtime it uses
+  (`flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo`).
+  It includes cloudflared, so public tunnels work out of the box; ngrok is not
+  included. It saves projects in the same `Documents/MockStudio` folder. See
+  [packaging/flatpak/README.md](packaging/flatpak/README.md).
 
 Every push to `main` builds, tests and packages Mock Studio for Linux and
 Windows on x64 and arm64 (the **Desktop builds** workflow). Its run page has
@@ -111,7 +147,11 @@ are in **Settings**; phones get a bottom-navigation layout.
 - **cloudflared** quick tunnels need no account. Install `cloudflared` and it
   appears in *Share & Expose → Public internet*. On Windows:
   `winget install --id Cloudflare.cloudflared`, then restart Mock Studio.
-- **ngrok** needs a one-time `ngrok config add-authtoken <token>`.
+  The Flatpak has its own copy; the snap cannot start it (see the snap's
+  description).
+- **ngrok** needs a one-time `ngrok config add-authtoken <token>`. The
+  Flatpak cannot start ngrok from the host: run `ngrok http <port>` in a
+  terminal instead, since the server listens on the host's network.
 
 ## Tech
 

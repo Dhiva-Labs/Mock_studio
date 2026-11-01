@@ -1,0 +1,70 @@
+# Flatpak manifest for Mock Studio.
+#
+# Like the .rpm, Arch package and AppImage, this repackages the installed
+# tree of the .deb that CI builds (unpacked into packaging/flatpak/tree/ by
+# the workflow), so the Flatpak ships the same binary as every other format
+# instead of a second build inside the sandbox. A Flathub submission needs
+# `tree` swapped for an archive source (release URL + sha256); see README.md
+# in this directory.
+id: com.dhivalabs.mock_studio
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: mockstudio
+finish-args:
+  # GTK needs a display socket; fallback-x11 covers X11-only desktops.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # GPU acceleration for Flutter's renderer.
+  - --device=dri
+  # The mock server listens on the host's network (localhost and LAN), and
+  # proxy passthrough and cloudflared reach out to the internet.
+  - --share=network
+  # Projects are saved as JSON in <Documents>/MockStudio/projects, the same
+  # folder as in every other package, so they stay visible and portable.
+  - --filesystem=xdg-documents/MockStudio:create
+modules:
+  # Public tunnels start `cloudflared`, which a sandboxed app cannot run
+  # from the host, so the Flatpak carries Cloudflare's own release build
+  # (Apache-2.0, a static Go binary), pinned by sha256. ngrok is proprietary
+  # and needs an account, so it is not bundled.
+  - name: cloudflared
+    buildsystem: simple
+    sources:
+      - type: file
+        only-arches: [x86_64]
+        url: https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64
+        sha256: 1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872
+        dest-filename: cloudflared
+      - type: file
+        only-arches: [aarch64]
+        url: https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-arm64
+        sha256: 3df43aedc9ff291d1735b5cb576cb97e0b157488796db2e32b28aecabb445775
+        dest-filename: cloudflared
+      - type: file
+        url: https://raw.githubusercontent.com/cloudflare/cloudflared/2026.10.7/LICENSE
+        sha256: 58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd
+    build-commands:
+      - install -Dm755 cloudflared /app/bin/cloudflared
+      - install -Dm644 LICENSE /app/share/licenses/cloudflared/LICENSE
+
+  - name: mockstudio
+    buildsystem: simple
+    sources:
+      - type: dir
+        path: tree
+        dest: tree
+      - type: file
+        path: com.dhivalabs.mock_studio.metainfo.xml
+    build-commands:
+      # Flutter finds lib/ and data/ next to its executable.
+      - install -d /app/lib /app/bin
+      - cp -a tree/usr/lib/mockstudio /app/lib/mockstudio
+      - ln -s ../lib/mockstudio/mock_studio /app/bin/mockstudio
+      - install -Dm644 tree/usr/share/applications/mockstudio.desktop /app/share/applications/com.dhivalabs.mock_studio.desktop
+      - desktop-file-edit --set-icon=com.dhivalabs.mock_studio /app/share/applications/com.dhivalabs.mock_studio.desktop
+      - install -Dm644 tree/usr/share/icons/hicolor/256x256/apps/mockstudio.png /app/share/icons/hicolor/256x256/apps/com.dhivalabs.mock_studio.png
+      - install -Dm644 tree/usr/share/icons/hicolor/512x512/apps/mockstudio.png /app/share/icons/hicolor/512x512/apps/com.dhivalabs.mock_studio.png
+      - install -Dm644 tree/usr/share/licenses/mockstudio/LICENSE /app/share/licenses/com.dhivalabs.mock_studio/LICENSE
+      - install -Dm644 com.dhivalabs.mock_studio.metainfo.xml /app/share/metainfo/com.dhivalabs.mock_studio.metainfo.xml
