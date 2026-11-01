@@ -52,3 +52,6 @@ app.*.map.json
 
 # snapcraft output
 *.snap
+
+# Flatpak build input, unpacked by the CI from the .deb
+packaging/flatpak/tree/

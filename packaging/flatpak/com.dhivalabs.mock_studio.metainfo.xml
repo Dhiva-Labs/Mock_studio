@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.dhivalabs.mock_studio</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Mock Studio</name>
+  <summary>Production mock server for building and testing HTTP endpoints</summary>
+  <description>
+    <p>Design HTTP endpoints visually, start a real server, and share it on your LAN or over a public tunnel. Conditional rules, response sequences, templating, fault injection, proxy recording and OpenAPI import - friendly enough for non-developers.</p>
+    <p>Public tunnels use cloudflared quick tunnels, which need no account; the Flatpak includes cloudflared.</p>
+  </description>
+  <launchable type="desktop-id">com.dhivalabs.mock_studio.desktop</launchable>
+  <provides>
+    <binary>mockstudio</binary>
+  </provides>
+  <url type="homepage">https://github.com/Dhiva-Labs/Mock_studio</url>
+  <url type="bugtracker">https://github.com/Dhiva-Labs/Mock_studio/issues</url>
+  <developer id="com.dhivalabs">
+    <name>Dhiva Labs</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.2.1" date="2026-10-16"/>
+  </releases>
+</component>
