@@ -12,6 +12,8 @@ endpoints visually, hit **Start**, and any client — your apps, browsers,
 emulators, phones on the same Wi-Fi, or webhook providers over a public tunnel —
 gets realistic mock responses.
 
+**Documentation:** step-by-step guides at [learn.dhivalabs.com](https://learn.dhivalabs.com/mock-studio/): [install](https://learn.dhivalabs.com/mock-studio/install) · [beginner guide](https://learn.dhivalabs.com/mock-studio/first-mock) · [troubleshooting](https://learn.dhivalabs.com/mock-studio/troubleshooting). New to the topic? Try the [APIs and testing](https://learn.dhivalabs.com/tracks/apis/) and [Networking and SSH](https://learn.dhivalabs.com/tracks/networking/) learning tracks.
+
 Built for two audiences at once: a complete beginner can build a working mock
 API from templates in a minute, while an expert gets precise control over rules,
 sequences, latency, faults, templating and proxying.
