@@ -43,7 +43,9 @@ grade: stable
 confinement: strict
 icon: snap/gui/mockstudio.png
 license: MIT
-website: https://github.com/Dhiva-Labs/Mock_studio
+website:
+  - https://github.com/Dhiva-Labs/Mock_studio
+  - https://learn.dhivalabs.com/mock-studio/
 source-code: https://github.com/Dhiva-Labs/Mock_studio
 issues: https://github.com/Dhiva-Labs/Mock_studio/issues
 contact: dhivakar1010@gmail.com
